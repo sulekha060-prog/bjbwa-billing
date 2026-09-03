@@ -1,0 +1,202 @@
+{
+    "G-1": {
+        "tenant": "VLCC",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 5340.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 6008.0
+            }
+        ],
+        "tax": 46.0,
+        "water": 1500.0,
+        "maintenance": 1200.0,
+        "lift": 0.0,
+        "others": 0.0
+    },
+    "G-2": {
+        "tenant": "REGALIA WELLNESS LLP",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 13468.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 15154.0
+            }
+        ],
+        "tax": 46.0,
+        "water": 300.0,
+        "maintenance": 2400.0,
+        "lift": 0.0,
+        "others": 0.0
+    },
+    "G-3": {
+        "tenant": "DILIGENT SERVICE",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 2670.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 3004.0
+            }
+        ],
+        "tax": 46.0,
+        "water": 200.0,
+        "maintenance": 1200.0,
+        "lift": 0.0,
+        "others": 0.0
+    },
+    "A-1": {
+        "tenant": "JHD",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 2670.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 3004.0
+            }
+        ],
+        "tax": 46.0,
+        "water": 0.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "B-1": {
+        "tenant": "PEPPERFRY",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 2670.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 3004.0
+            }
+        ],
+        "tax": 46.0,
+        "water": 0.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "C-1": {
+        "tenant": "PODDAR",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 2670.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 3004.0
+            }
+        ],
+        "tax": 46.0,
+        "water": 0.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "D-1": {
+        "tenant": "PAWAN KUMAR SARAWGI",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 2670.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 3004.0
+            }
+        ],
+        "tax": 46.0,
+        "water": 0.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "E-1": {
+        "tenant": "PINKI BANSAL",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 2670.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 3004.0
+            }
+        ],
+        "tax": 46.0,
+        "water": 0.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "F-1": {
+        "tenant": "JHD",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1335.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1502.0
+            }
+        ],
+        "tax": 0.0,
+        "water": 0.0,
+        "maintenance": 600.0,
+        "lift": 295.0,
+        "others": 0.0
+    },
+    "F-2": {
+        "tenant": "JHD",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1335.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1502.0
+            }
+        ],
+        "tax": 0.0,
+        "water": 0.0,
+        "maintenance": 600.0,
+        "lift": 295.0,
+        "others": 0.0
+    }
+}

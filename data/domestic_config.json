@@ -1,0 +1,373 @@
+{
+    "A-2": {
+        "tenant": "BSA",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "B-2": {
+        "tenant": "BSA",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "C-2": {
+        "tenant": "S. VINAYAK",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "D-2": {
+        "tenant": "HEMANT KUMAR DEY",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "E-2": {
+        "tenant": "RAMEN DEY",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "F-2": {
+        "tenant": "SUDAMA SINGH",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "A-3": {
+        "tenant": "M. SINGHANIA",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "B-3": {
+        "tenant": "SHEKHAR",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "C-3": {
+        "tenant": "JAI MANGLA SPONG IRON",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "D-3": {
+        "tenant": "M.R. ORGANISATION LTD.",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "E-3": {
+        "tenant": "SULEKHA DEY",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "F-3": {
+        "tenant": "SADHANA DEY",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "A-4": {
+        "tenant": "S.K.BANERJEE",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "B-4": {
+        "tenant": "ASHIRWAD SPONGE IRON",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "C-4": {
+        "tenant": "KABITA SINGH",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "D-4": {
+        "tenant": "R&R LOGISTICS",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "E-4": {
+        "tenant": "PODDAR",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "F-4": {
+        "tenant": "H.K.GIRI",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 1187.0
+            },
+            {
+                "start_month": "JUL",
+                "start_year": 2026,
+                "val": 1374.0
+            }
+        ],
+        "tax": 46.0,
+        "maintenance": 1200.0,
+        "lift": 590.0,
+        "others": 0.0
+    },
+    "G-4": {
+        "tenant": "OWN",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 0.0
+            }
+        ],
+        "tax": 0.0,
+        "maintenance": 1200.0,
+        "lift": 0.0,
+        "others": 0.0
+    },
+    "Common": {
+        "tenant": "ASSOCIATION MASTER METER",
+        "fixed": [
+            {
+                "start_month": "JAN",
+                "start_year": 2020,
+                "val": 0.0
+            }
+        ],
+        "tax": 0.0,
+        "maintenance": 0.0,
+        "lift": 0.0,
+        "others": 0.0,
+        "is_common": true
+    }
+}

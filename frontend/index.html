@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ Basant Jamini Bhawan Welfare Association - Automation Hub</title>
+    <link rel="stylesheet" href="/css/style.css?v=20260903-1850">
+</head>
+<body>
+
+    <!-- Dedicated Admin Login Gate (Default Page) -->
+    <div id="adminLoginScreen" class="admin-login-screen">
+        <div class="admin-login-card">
+            <div class="admin-login-header">
+                <div class="admin-login-icon">🏢</div>
+                <h1 class="admin-login-title">Basant Jamini Bhawan Welfare Association</h1>
+                <p class="admin-login-subtitle">Billing Automation & Financial Management Portal</p>
+            </div>
+
+            <div class="admin-login-body">
+                <div class="admin-login-portal-badge">
+                    <span>🔒 Administrator Access Required</span>
+                </div>
+                <p class="admin-login-desc">
+                    Please sign in to access billing automation, master ledger, dues allocation, and system configurations.
+                </p>
+
+                <div id="adminPageLoginError" class="admin-error-box" style="display: none;"></div>
+
+                <form id="adminLoginForm" onsubmit="handleAdminLoginSubmit(event); return false;">
+                    <div class="form-group" style="margin-bottom: 16px; text-align: left;">
+                        <label class="form-label" style="font-weight: 600; font-size: 13px; color: #1e293b;">Admin Username</label>
+                        <input type="text" id="adminGateUsername" class="form-control" style="font-size: 14px; padding: 10px 12px;" placeholder="Username" value="admin" autocomplete="username" required>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+                        <label class="form-label" style="font-weight: 600; font-size: 13px; color: #1e293b;">Admin Password</label>
+                        <input type="password" id="adminGatePassword" class="form-control" style="font-size: 14px; padding: 10px 12px;" placeholder="Password" autocomplete="current-password" required>
+                    </div>
+
+                    <button type="submit" id="btnAdminGateSubmit" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <span>🔓 Log In to Portal</span>
+                    </button>
+                </form>
+
+                <div class="admin-login-footer-hint">
+                    💡 <em>Default credentials:</em> <strong>admin</strong> / <strong>admin123</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Working Application Container (Visible ONLY after successful Admin Login) -->
+    <div id="appWorkingContainer" style="display: none;">
+
+        <!-- 1. Top Mode Controller Bar -->
+        <header class="mode-bar">
+            <span class="mode-bar-title">🔌 ACTIVE BILLING CLASSIFICATION TARGETMODE:</span>
+            <select id="globalModeSelect" class="mode-select">
+                <option value="COMMERCIAL" selected>COMMERCIAL</option>
+                <option value="DOMESTIC">DOMESTIC</option>
+            </select>
+
+            <div id="domesticCommonMeterGroup" class="common-meter-group" style="display: none;">
+                <label for="entCmOpen">🔑 Common Open:</label>
+                <input type="number" id="entCmOpen" class="common-input" placeholder="Open">
+                <label for="entCmClose">🔒 Common Close:</label>
+                <input type="number" id="entCmClose" class="common-input" placeholder="Close">
+                <span class="status-badge">⚙️ Connected to Common Master Meter Loop</span>
+            </div>
+
+            <!-- Google Sheets Status Pill -->
+            <div id="sheetsStatusPill" class="sheets-status-pill" onclick="openSheetsModal()">
+                <span id="sheetsDot" class="sheets-dot"></span>
+                <span id="sheetsStatusText">Google Sheets: Ready (Local Mirror)</span>
+                <span style="font-size: 10px; color: #94a3b8;">[⚙️ Settings]</span>
+            </div>
+
+            <!-- Admin Auth Controller in Working Header -->
+            <div id="adminAuthContainer" style="display: flex; align-items: center; gap: 8px; margin-left: 10px;">
+                <span class="status-badge" style="background: #dcfce7; color: #166534; border-color: #86efac; font-weight: 700; font-size: 11px;">
+                    🛡️ Admin: Authenticated
+                </span>
+                <button class="btn btn-sm btn-danger" style="padding: 4px 8px; font-size: 11px; cursor: pointer;" onclick="logoutAdmin()">Logout</button>
+            </div>
+        </header>
+
+    <!-- 2. Tab Navigation Header -->
+    <nav class="tab-header">
+        <button class="tab-btn active" onclick="switchTab('tabUpload')">⚡ Automated File Upload</button>
+        <button class="tab-btn" onclick="switchTab('tabLedger')">📊 Master Ledger Database</button>
+        <button class="tab-btn" onclick="switchTab('tabDues')">📋 Dues Management</button>
+        <button class="tab-btn" onclick="switchTab('tabSettings')">⚙️ Live Rate Settings</button>
+        <button class="tab-btn" onclick="switchTab('tabNotices')">📋 Invoice Notices</button>
+        <button class="btn-reset-buffers" onclick="resetFieldBuffers()">🔄 RESET FIELD BUFFERS</button>
+    </nav>
+
+    <!-- 3. Tab Content Area -->
+    <main class="tab-content-area">
+
+        <!-- Banner Header -->
+        <div class="brand-banner">
+            🏢 BASANT JAMINI BHAWAN WELFARE ASSOCIATION - AUTOMATION HUB
+        </div>
+
+        <!-- ==================== TAB 1: AUTOMATED FILE UPLOAD ==================== -->
+        <section id="tabUpload" class="tab-pane active">
+            <div class="grid-2col">
+                <!-- Left Card -->
+                <div class="app-card">
+                    <div class="app-card-title">1-Click File Automation</div>
+
+                    <p style="font-weight: bold; margin-bottom: 8px; font-size: 13px;">Upload Your Monthly Meter Reading Document:</p>
+                    
+                    <div class="upload-dropzone" id="uploadDropzone" onclick="document.getElementById('fileInput').click()">
+                        <div class="upload-icon">📁</div>
+                        <div style="font-weight: bold; color: var(--color-accent); font-size: 14px;">
+                            CLICK OR DRAG & DROP METER READING FILE (.PDF / .DOCX / .TXT / .CSV)
+                        </div>
+                        <div style="font-size: 11px; color: var(--color-text-muted); margin-top: 4px;">
+                            Extracts billing period and meter readings automatically
+                        </div>
+                        <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx,.txt,.csv" onchange="handleFileUpload(event)">
+                    </div>
+
+                    <!-- Required File Formatting Template Box -->
+                    <div class="app-card-title" id="templateCardTitle" style="font-size: 12px;">
+                        📋 Required File Formatting Template Example (COMMERCIAL)
+                    </div>
+                    <div class="template-box" id="lblExampleBox">Due Month: AUG-2026
+G-1   53498   54622
+G-2   69752   75090
+A-1   82446   82907
+F-2   35359   35497</div>
+
+                    <!-- Historical Common Area Average Units Lookup (Domestic) -->
+                    <div id="avgLookupFrame" class="app-card" style="background: #f8fafc; padding: 12px; display: none;">
+                        <div class="app-card-title" style="font-size: 12px;">📊 Historical Common Area Average Units Lookup</div>
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <label class="form-label" style="margin: 0;">Year:</label>
+                            <select id="comboLookupYear" class="form-control" style="width: 80px;" onchange="executeLiveAverageLookup()">
+                                <option value="2024">2024</option>
+                                <option value="2025">2025</option>
+                                <option value="2026" selected>2026</option>
+                                <option value="2027">2027</option>
+                            </select>
+
+                            <label class="form-label" style="margin: 0;">Month:</label>
+                            <select id="comboLookupMonth" class="form-control" style="width: 80px;" onchange="executeLiveAverageLookup()">
+                                <option value="JAN">JAN</option><option value="FEB">FEB</option><option value="MAR">MAR</option>
+                                <option value="APR">APR</option><option value="MAY">MAY</option><option value="JUN">JUN</option>
+                                <option value="JUL">JUL</option><option value="AUG">AUG</option><option value="SEP">SEP</option>
+                                <option value="OCT">OCT</option><option value="NOV">NOV</option><option value="DEC">DEC</option>
+                            </select>
+
+                            <span style="font-weight: bold; color: var(--color-secondary); font-size: 12px;">Calculated Average:</span>
+                            <input type="text" id="entLookupOutput" class="form-control" style="width: 110px; font-weight: bold; text-align: center; background: #e2e8f0; color: #0f766e;" value="0.00 Units" readonly>
+                        </div>
+                    </div>
+
+                    <!-- Quick Manual Entry Override -->
+                    <div style="margin-top: 15px;">
+                        <div class="app-card-title">Or Quick Manual Entry Input Override:</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                            <div>
+                                <label class="form-label">Flat No:</label>
+                                <select id="comboManualFlat" class="form-control"></select>
+                            </div>
+                            <div>
+                                <label class="form-label">Month:</label>
+                                <select id="comboManualMonth" class="form-control" onchange="syncManualLabels()">
+                                    <option value="JAN">JAN</option><option value="FEB">FEB</option><option value="MAR">MAR</option>
+                                    <option value="APR">APR</option><option value="MAY">MAY</option><option value="JUN">JUN</option>
+                                    <option value="JUL">JUL</option><option value="AUG">AUG</option><option value="SEP">SEP</option>
+                                    <option value="OCT">OCT</option><option value="NOV">NOV</option><option value="DEC">DEC</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label">Year:</label>
+                                <select id="comboManualYear" class="form-control" onchange="syncManualLabels()">
+                                    <option value="2024">2024</option>
+                                    <option value="2025">2025</option>
+                                    <option value="2026" selected>2026</option>
+                                    <option value="2027">2027</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px;">
+                            <div>
+                                <label class="form-label">Opening Reading:</label>
+                                <input type="number" id="entManualPrev" class="form-control" placeholder="Opening Reading">
+                            </div>
+                            <div>
+                                <label class="form-label">Closing Reading:</label>
+                                <input type="number" id="entManualCurr" class="form-control" placeholder="Closing Reading">
+                            </div>
+                            <div>
+                                <label class="form-label">Others / Misc (Rs.):</label>
+                                <input type="number" id="entManualMisc" class="form-control" placeholder="Usually 0" value="0">
+                            </div>
+                        </div>
+
+                        <button class="btn btn-secondary btn-block btn-lg" style="margin-top: 12px;" onclick="processManualBill()">
+                            🚀 Process Single Manual Line Entry
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Card: System Operations Guide -->
+                <div class="app-card">
+                    <div class="app-card-title">System Operations Guide</div>
+                    <div style="background: var(--color-card-bg); padding: 10px 14px; border-radius: 4px; font-weight: bold; color: var(--color-secondary); font-size: 13px; margin-bottom: 15px;">
+                        ⚙️ SYSTEM PROTECTION STANDARDS
+                    </div>
+
+                    <ul style="list-style: none; font-size: 13px; line-height: 1.8; color: #334155;">
+                        <li style="margin-bottom: 12px;">
+                            <strong style="color: var(--color-primary);">✓ Multi-Flat Filtering Matrix:</strong> Use the multi-select checklist inside settings to broadcast fixed rate or utility charge changes across several flats simultaneously.
+                        </li>
+                        <li style="margin-bottom: 12px;">
+                            <strong style="color: var(--color-primary);">✓ Editable File Previews:</strong> After uploading meter reading files, an interactive Step 2 verification dialog opens to let you audit and fine-tune readings before finalizing records.
+                        </li>
+                        <li style="margin-bottom: 12px;">
+                            <strong style="color: var(--color-primary);">✓ Multi-Flat JHD Grouping:</strong> JHD flats (A-1, F-1, F-2) are automatically combined into a single consolidated multi-flat invoice statement upon printing.
+                        </li>
+                        <li style="margin-bottom: 12px;">
+                            <strong style="color: var(--color-primary);">✓ Cloud Storage Integration:</strong> Backed by Google Sheets (<code style="background: #e2e8f0; padding: 2px 4px; border-radius: 3px;">Maintenance bill</code> and <code style="background: #e2e8f0; padding: 2px 4px; border-radius: 3px;">Domestic Maintenance bill</code>), with local mirror caching for zero-latency performance.
+                        </li>
+                        <li>
+                            <strong style="color: var(--color-primary);">✓ High-Contrast White PDF Invoicing:</strong> Invoices compile with bold typography, 2px borders, bold numbers, and clean white background styling.
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 2: MASTER LEDGER DATABASE ==================== -->
+        <section id="tabLedger" class="tab-pane">
+            <!-- Filter & Action Bar -->
+            <div class="action-bar">
+                <span class="action-bar-title">🔍 Filters & Actions:</span>
+                <label style="font-weight: bold; font-size: 12px;">Flat:</label>
+                <input type="text" id="filterFlat" class="form-control" style="width: 70px;" oninput="applyLedgerFilters()">
+
+                <label style="font-weight: bold; font-size: 12px;">Month:</label>
+                <input type="text" id="filterMonth" class="form-control" style="width: 65px;" oninput="applyLedgerFilters()">
+
+                <label style="font-weight: bold; font-size: 12px;">Year:</label>
+                <input type="text" id="filterYear" class="form-control" style="width: 65px;" oninput="applyLedgerFilters()">
+
+                <span style="color: #cbd5e1;">|</span>
+
+                <span style="font-weight: bold; font-size: 12px; color: var(--color-accent);">Edit Readings:</span>
+                <input type="number" id="editOpenReading" class="form-control" style="width: 85px;" placeholder="Open">
+                <input type="number" id="editCloseReading" class="form-control" style="width: 85px;" placeholder="Close">
+                <button class="btn btn-secondary" onclick="saveHistoricalRowModification()">💾 UPDATE RECORD</button>
+
+                <label style="display: flex; align-items: center; gap: 4px; font-weight: bold; font-size: 12px; cursor: pointer;">
+                    <input type="checkbox" id="chkBatchPaid"> Mark Paid
+                </label>
+                <button class="btn btn-secondary" onclick="applyBatchPaymentStatus()">⚡ APPLY</button>
+
+                <button class="btn" style="background-color: var(--color-orange); color: #fff;" onclick="document.getElementById('importFileInput').click()">📥 IMPORT FILE</button>
+                <input type="file" id="importFileInput" style="display: none;" accept=".xlsx,.xls,.csv" onchange="handleLedgerImport(event)">
+
+                <button class="btn btn-primary" style="margin-left: auto;" onclick="printSelectedLedgerStatements()">🖨️ PRINT SELECTED</button>
+                <button class="btn" style="background-color: #0d9488; color: #fff; font-weight: bold;" onclick="printAllCurrentMonthStatements()">🖨️ PRINT ALL FLATS</button>
+                <button class="btn btn-danger" onclick="deleteSelectedLedgerRecords()">🗑️ DELETE</button>
+            </div>
+
+            <!-- Partial Payment & Reset Controls Bar -->
+            <div class="action-bar" style="background: #faf5ff; border-color: #d8b4fe;">
+                <span class="action-bar-title" style="color: var(--color-purple);">Partial Payment & Reset:</span>
+                <label style="font-weight: bold; font-size: 12px;">Partial Pay (Rs.):</label>
+                <input type="number" id="entPartialPayment" class="form-control" style="width: 100px;" placeholder="Amount">
+                <button class="btn btn-purple" onclick="applyPartialPayment()">SAVE PARTIAL</button>
+
+                <span style="color: #cbd5e1; margin: 0 5px;">|</span>
+
+                <label style="font-weight: bold; font-size: 12px;">Reset:</label>
+                <select id="comboBatchReset" class="form-control" style="width: 60px;">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                </select>
+                <button class="btn btn-primary" onclick="applyBatchResetStatus()">APPLY RESET</button>
+
+                <button class="btn btn-secondary" style="margin-left: auto;" onclick="syncWithGoogleSheets()">🔄 SYNC GOOGLE SHEETS</button>
+            </div>
+
+            <!-- Table Container -->
+            <div class="table-responsive" style="max-height: 520px;">
+                <table class="data-table" id="ledgerTable">
+                    <thead>
+                        <tr id="ledgerTableHeadRow"></tr>
+                    </thead>
+                    <tbody id="ledgerTableBody">
+                        <tr><td colspan="19" style="padding: 20px;">Loading database records...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 3: DUES MANAGEMENT ==================== -->
+        <section id="tabDues" class="tab-pane">
+            <div class="action-bar">
+                <span class="action-bar-title">Resident Dues Tracking:</span>
+                <label style="font-weight: bold; font-size: 12px;">Select Flat:</label>
+                <select id="comboDuesFlat" class="form-control" style="width: 140px;" onchange="loadDuesData()"></select>
+                <button class="btn btn-primary" onclick="loadDuesData()">REFRESH DUES</button>
+
+                <span style="color: #cbd5e1; margin: 0 5px;">|</span>
+
+                <span style="font-weight: bold; font-size: 12px; color: var(--color-secondary);">Payment Amount (Rs.):</span>
+                <input type="number" id="entDuesPaymentAmt" class="form-control" style="width: 105px;" placeholder="Amount">
+
+                <label style="font-weight: bold; font-size: 12px;">Date Paid:</label>
+                <input type="text" id="entDuesDatePaid" class="form-control" style="width: 105px;">
+
+                <button class="btn btn-secondary" onclick="applyDuesPaymentAllocation()">APPLY PAYMENT & ALLOCATE MONTHS</button>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="kpi-row">
+                <div class="kpi-card">
+                    <div class="kpi-label">Cumulative Total Due</div>
+                    <div class="kpi-value kpi-red" id="kpiTotalDue">Rs. 0.00</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Cumulative Total Paid</div>
+                    <div class="kpi-value kpi-green" id="kpiTotalPaid">Rs. 0.00</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Outstanding Balance Left</div>
+                    <div class="kpi-value kpi-blue" id="kpiBalanceLeft">Rs. 0.00</div>
+                </div>
+            </div>
+
+            <!-- Dues Table -->
+            <div class="table-responsive" style="max-height: 480px;">
+                <table class="data-table" id="duesTable">
+                    <thead>
+                        <tr id="duesTableHeadRow"></tr>
+                    </thead>
+                    <tbody id="duesTableBody">
+                        <tr><td colspan="19" style="padding: 20px;">No pending dues records.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 4: LIVE RATE SETTINGS ==================== -->
+        <section id="tabSettings" class="tab-pane">
+            <div class="app-card">
+                <div class="app-card-title">⚙️ Parameter Adjustments Dashboard Matrix</div>
+
+                <!-- 1. Validity Date Rule & RPU -->
+                <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 15px; margin-bottom: 15px;">
+                    <!-- Validity Boundary -->
+                    <div class="app-card" style="margin: 0; padding: 12px;">
+                        <div style="font-weight: bold; font-size: 12px; color: var(--color-primary); margin-bottom: 8px;">
+                            Rate Configuration Rule Validity Period Boundary
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <div>
+                                <label class="form-label">Activation Start Month:</label>
+                                <select id="comboConfigStartMonth" class="form-control" onchange="onConfigFieldChanged()">
+                                    <option value="JAN">JAN</option><option value="FEB">FEB</option><option value="MAR">MAR</option>
+                                    <option value="APR">APR</option><option value="MAY">MAY</option><option value="JUN" selected>JUN</option>
+                                    <option value="JUL">JUL</option><option value="AUG">AUG</option><option value="SEP">SEP</option>
+                                    <option value="OCT">OCT</option><option value="NOV">NOV</option><option value="DEC">DEC</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label">Activation Start Year:</label>
+                                <select id="comboConfigStartYear" class="form-control" onchange="onConfigFieldChanged()">
+                                    <option value="2024">2024</option>
+                                    <option value="2025">2025</option>
+                                    <option value="2026" selected>2026</option>
+                                    <option value="2027">2027</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Electricity RPU Rates -->
+                    <div class="app-card" style="margin: 0; padding: 12px;">
+                        <div style="font-weight: bold; font-size: 12px; color: var(--color-primary); margin-bottom: 8px;">
+                            Electricity Rate Per Unit (RPU)
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: flex-end;">
+                            <div>
+                                <label class="form-label">RPU Domestic (Rs.):</label>
+                                <input type="number" id="entRpuDomestic" class="form-control" style="font-weight: bold; text-align: center; width: 95px;" step="0.1" value="5.40">
+                            </div>
+                            <div>
+                                <label class="form-label">RPU Commercial (Rs.):</label>
+                                <input type="number" id="entRpuCommercial" class="form-control" style="font-weight: bold; text-align: center; width: 95px;" step="0.1" value="6.90">
+                            </div>
+                            <button class="btn btn-secondary" onclick="saveRPURates()">SAVE RPU RATES</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Parameter Field Select & Multi-Flat Selection -->
+                <div class="app-card" style="padding: 15px; margin-bottom: 15px;">
+                    <div style="font-weight: bold; font-size: 13px; color: var(--color-primary); margin-bottom: 10px;">
+                        Select Field Property, Set Value and Choose Target Flat Profiles
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <div class="form-group">
+                                <label class="form-label">Choose Parameter Field to Modify:</label>
+                                <select id="comboConfigFieldSelect" class="form-control" onchange="onConfigFieldChanged()">
+                                    <option value="fixed">Fixed Meter Charges (Rs.)</option>
+                                    <option value="tax">Municipal Property Tax (Rs.)</option>
+                                    <option value="water">Water Fee Share (Commercial Only)</option>
+                                    <option value="maintenance">Building Maintenance Fund (Rs.)</option>
+                                    <option value="lift">Lift Operational Share Fee (Rs.)</option>
+                                    <option value="others">Others / Miscellaneous Overheads (Rs.)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Input Target New Numeric Value (Rs.):</label>
+                                <input type="number" id="entConfigFieldValue" class="form-control" step="0.01" placeholder="Enter amount">
+                            </div>
+                            <button class="btn btn-secondary btn-block btn-lg" style="margin-top: 15px;" onclick="saveFlatRatesFromFields()">
+                                💾 EXECUTE VALUE CHANGES TO SELECTED FLAT REGISTRIES
+                            </button>
+                        </div>
+
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <label class="form-label" style="margin: 0;">Select Target Flat No(s):</label>
+                                <div>
+                                    <button class="btn" style="padding: 2px 8px; font-size: 11px; background: #e2e8f0;" onclick="toggleAllFlats(true)">Select All</button>
+                                    <button class="btn" style="padding: 2px 8px; font-size: 11px; background: #e2e8f0;" onclick="toggleAllFlats(false)">Deselect All</button>
+                                </div>
+                            </div>
+                            <div class="checklist-container" id="flatsChecklist"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Live Inspector Grid -->
+                <div class="app-card" style="margin: 0; padding: 12px;">
+                    <div class="app-card-title" style="font-size: 12px;">Live Individual Flat Parameter Registry Inspector Grid</div>
+                    <div class="table-responsive" style="max-height: 320px;">
+                        <table class="data-table" id="liveRatesTable">
+                            <thead>
+                                <tr>
+                                    <th>Flat No</th>
+                                    <th>Tenant Name</th>
+                                    <th>Fixed Base Charge</th>
+                                    <th>Municipal Tax</th>
+                                    <th>Water Allocation</th>
+                                    <th>Maint Fund</th>
+                                    <th>Lift Fee</th>
+                                    <th>Others Fee</th>
+                                </tr>
+                            </thead>
+                            <tbody id="liveRatesTableBody"></tbody>
+                        </table>
+                </div>
+
+                <!-- 4. Admin Security & Password Settings -->
+                <div class="app-card" style="margin-top: 15px; padding: 16px;">
+                    <div class="app-card-title" style="font-size: 13px;">🛡️ Administrator Password & Security</div>
+                    <p style="font-size: 12px; color: var(--color-text-muted); margin-bottom: 12px;">
+                        Update the administrative password used to authorize bill processing, record modifications, payment allocations, and configuration updates.
+                    </p>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+                        <div style="flex: 1; min-width: 180px;">
+                            <label class="form-label">Current Password:</label>
+                            <input type="password" id="adminOldPassInput" class="form-control" placeholder="Current password">
+                        </div>
+                        <div style="flex: 1; min-width: 180px;">
+                            <label class="form-label">New Password:</label>
+                            <input type="password" id="adminNewPassInput" class="form-control" placeholder="New password (min 4 chars)">
+                        </div>
+                        <div>
+                            <button class="btn btn-secondary" onclick="updateAdminPassword()">🔒 Update Password</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 5: INVOICE NOTICES ==================== -->
+        <section id="tabNotices" class="tab-pane">
+            <div class="app-card">
+                <div class="app-card-title">📋 Global Bill Instructions Paragraph Notice Editor</div>
+                <p style="font-size: 12px; color: var(--color-text-muted); margin-bottom: 12px;">
+                    Edit the bottom notice text. This paragraph appears at the bottom of every single-page and grouped report statement.
+                </p>
+
+                <textarea id="txtGlobalInstructions" class="form-control" style="height: 240px; font-family: 'Segoe UI', sans-serif; font-size: 13px; line-height: 1.6; padding: 12px;"></textarea>
+
+                <button class="btn btn-secondary btn-block btn-lg" style="margin-top: 15px;" onclick="saveGlobalNoticeText()">
+                    💾 SAVE NOTICES PARAGRAPH PERMANENTLY
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- Step 2: Verification Modal -->
+    <div id="verifyModal" class="modal-overlay">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <span>🔍 Step 2: Verify & Modify Extracted Row Data Formats</span>
+                <span style="cursor: pointer;" onclick="closeVerifyModal()">✖</span>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; gap: 20px; margin-bottom: 12px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 14px; border-radius: 6px; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 12px; font-weight: 700; color: #1e293b;">📅 Billing Month:</label>
+                        <input type="text" id="verifyMonth" class="form-control" style="width: 85px; font-weight: bold; text-transform: uppercase; text-align: center;" placeholder="e.g. JAN">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 12px; font-weight: 700; color: #1e293b;">📅 Billing Year:</label>
+                        <input type="text" id="verifyYear" class="form-control" style="width: 85px; font-weight: bold; text-align: center;" placeholder="e.g. 2026">
+                    </div>
+                    <span style="font-size: 11px; color: #64748b; margin-left: auto;">(Confirm or modify billing period)</span>
+                </div>
+                <p style="font-size: 12px; color: var(--color-text-muted); margin-bottom: 10px;">
+                    Review the readings extracted from your document. You can directly edit any numbers before generating statements.
+                </p>
+                <div class="table-responsive" style="max-height: 380px;">
+                    <table class="data-table" id="verifyTable">
+                        <thead>
+                            <tr>
+                                <th>Flat / Asset No.</th>
+                                <th>Opening Reading</th>
+                                <th>Closing Reading</th>
+                            </tr>
+                        </thead>
+                        <tbody id="verifyTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" onclick="closeVerifyModal()">Cancel Process</button>
+                <button class="btn btn-secondary" onclick="confirmProcessedBills()">✓ Save Changes & Process Bills</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Sheets Setup & Sync Modal -->
+    <div id="sheetsModal" class="modal-overlay">
+        <div class="modal-dialog" style="max-width: 650px;">
+            <div class="modal-header">
+                <span>🔌 Google Sheets Cloud Storage Connection</span>
+                <span style="cursor: pointer;" onclick="closeSheetsModal()">✖</span>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <p style="font-size: 12px; color: var(--color-text-muted); margin-bottom: 12px;">
+                    Connect your live Google Spreadsheet to manage <code style="background: #e2e8f0; padding: 2px 4px; border-radius: 3px;">Maintenance bill</code> and <code style="background: #e2e8f0; padding: 2px 4px; border-radius: 3px;">Domestic Maintenance bill</code> in Google Cloud.
+                </p>
+
+                <!-- Template Download Card -->
+                <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 12px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <div style="font-weight: bold; color: var(--color-primary); font-size: 13px;">📥 Ready-Made Google Sheet Workbook</div>
+                        <div style="font-size: 11px; color: #475569;">Contains both Commercial & Domestic sheets formatted with all 20 columns.</div>
+                    </div>
+                    <a href="/api/download-template" download class="btn btn-primary" style="font-size: 11px; padding: 6px 12px; text-decoration: none;">Download .xlsx</a>
+                </div>
+
+                <!-- Method 1: Google Apps Script Web App (Easiest) -->
+                <div class="app-card" style="padding: 12px; margin-bottom: 12px; border-color: #0d9488;">
+                    <div style="font-weight: bold; color: var(--color-secondary); font-size: 13px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>Option 1: Google Apps Script Webhook (Easiest - Zero Cloud Console Setup)</span>
+                        <button class="btn" style="padding: 3px 8px; font-size: 10px; background: #0d9488; color: #fff;" onclick="copyAppsScriptCode()">📋 Copy Apps Script Code</button>
+                    </div>
+                    <p style="font-size: 11px; color: #475569; margin-bottom: 8px;">
+                        1. Open your Google Sheet (<a href="https://sheets.new" target="_blank" style="color: var(--color-primary); font-weight: bold;">sheets.new</a> or uploaded template).<br>
+                        2. Go to <b>Extensions > Apps Script</b>, paste the script code, and click <b>Deploy > New deployment > Web app</b> (Who has access: <i>Anyone</i>).<br>
+                        3. Paste the generated Web App URL below:
+                    </p>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">Google Apps Script Web App URL:</label>
+                        <input type="text" id="cfgAppsScriptUrl" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
+                    </div>
+                </div>
+
+                <!-- Method 2: Google Cloud Service Account -->
+                <div class="app-card" style="padding: 12px; margin-bottom: 12px;">
+                    <div style="font-weight: bold; color: var(--color-primary); font-size: 13px; margin-bottom: 6px;">
+                        Option 2: Google Cloud Service Account (Advanced API)
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Google Spreadsheet ID:</label>
+                        <input type="text" id="cfgSpreadsheetId" class="form-control" placeholder="e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms">
+                        <small style="color: #64748b; font-size: 11px;">Found in your Google Sheet URL between <code>/d/</code> and <code>/edit</code></small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Service Account Credentials File:</label>
+                        <input type="text" id="cfgCredentialsFile" class="form-control" value="service_account.json">
+                        <small style="color: #64748b; font-size: 11px;">Place your Service Account JSON file in the <code>data/</code> folder.</small>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 6px; font-weight: bold; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="cfgUseLiveSheets" checked> Enable Live Google Sheets Sync
+                    </label>
+                </div>
+
+                <div id="sheetsDiagBox" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 10px; font-size: 12px;">
+                    <strong>Connection Status:</strong> <span id="diagStatusText">Checking...</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="syncWithGoogleSheets()">🔄 Full Sync Now</button>
+                <button class="btn btn-primary" onclick="saveSheetsConfig()">💾 Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Viewer Modal -->
+    <div id="pdfModal" class="modal-overlay">
+        <div class="modal-dialog" style="max-width: 900px; height: 90vh;">
+            <div class="modal-header">
+                <span>📄 Generated Statement PDF Preview</span>
+                <span style="cursor: pointer;" onclick="closePdfModal()">✖</span>
+            </div>
+            <div class="modal-body" style="padding: 0; height: 100%;">
+                <iframe id="pdfViewerFrame" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="downloadCurrentPdf()">📥 Download PDF</button>
+                <button class="btn" style="background: #64748b; color: #fff;" onclick="closePdfModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    </div> <!-- Close appWorkingContainer -->
+
+    <!-- Global Symbolic Processing Overlay -->
+    <div id="globalLoadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-card">
+            <div class="loading-spinner-wrapper">
+                <div class="loading-spinner"></div>
+                <div class="loading-symbol-icon" id="loadingSymbolIcon">⚡</div>
+            </div>
+            <div class="loading-title" id="loadingTitle">Processing Operation...</div>
+            <div class="loading-subtext" id="loadingSubtext">Please wait while the system completes this action.</div>
+            <div class="loading-bar">
+                <div class="loading-bar-inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js?v=20260903-1850"></script>
+</body>
+</html>

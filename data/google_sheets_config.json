@@ -1,0 +1,7 @@
+{
+    "spreadsheet_id": "",
+    "spreadsheet_url": "",
+    "credentials_file": "service_account.json",
+    "use_live_google_sheets": true,
+    "apps_script_url": "https://script.google.com/macros/s/AKfycbzYOJIr8rVkNd9g5hWdT4CB8AEbG--N2V9n44xUdXpY8GwbdudGOUHLkiX_Kw1Zz717/exec"
+}

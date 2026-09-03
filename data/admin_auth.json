@@ -1,0 +1,10 @@
+{
+    "username": "admin",
+    "salt": "3df105e060c62d31382a4bffca28c217",
+    "password_hash": "0f3f9720494c8730e894d057819f7f7577618164952a45f0eb0ca5a9710b1e32",
+    "tokens": {
+        "y1b3W520JKSw6nKk4RtUc2JslpBLUvpyFndRkp2KjsE": "2026-09-10T18:34:51.862866",
+        "eDiuAxy8Xey6T9LiAqsKP-Oy-vA3iNdmT6_KqIRQWKo": "2026-09-10T18:36:36.093302",
+        "xWFjunlPDMprvbz_ehH0O7hdSHM44Ki-Po4kD7GjgDM": "2026-09-10T19:00:36.931331"
+    }
+}
