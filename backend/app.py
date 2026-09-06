@@ -715,7 +715,8 @@ def print_selected_statements(req: PrintStatementsRequest):
                 "others": float(r.get("Others_Charges_Rs", 0) or 0)
             }
             com_units = float(r.get("Common_Area_Units", 0) or 0) if mode == "DOMESTIC" else 0.0
-            consumed = float(r.get("Consumed_Units", 0) or 0) + com_units
+            meter_consumed = float(r.get("Consumed_Units", 0) or 0)
+            consumed = meter_consumed + com_units
 
             compiled_html += pdf_generator.generate_html_single_bill(
                 flat_no=str(r.get("Flat_No", "")),
@@ -730,7 +731,8 @@ def print_selected_statements(req: PrintStatementsRequest):
                 total=float(r.get("Total_Amount_Due_Rs", 0) or 0),
                 tenant_type=mode,
                 com_area_val=com_units,
-                notice_content=notice_content
+                notice_content=notice_content,
+                meter_units=meter_consumed
             )
 
     pdf_bytes = pdf_generator.compile_pdf_bytes(compiled_html)

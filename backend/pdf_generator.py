@@ -105,11 +105,30 @@ PDF_HTML_WRAPPER = """
 </html>
 """
 
-def generate_html_single_bill(flat_no, cfg, due_month_str, due_year_str, prev_r, float_curr, consumed, elec_charge, others_val, total, tenant_type, com_area_val, notice_content):
+def generate_html_single_bill(flat_no, cfg, due_month_str, due_year_str, prev_r, float_curr, consumed, elec_charge, others_val, total, tenant_type, com_area_val, notice_content, meter_units=None):
     """Generates the HTML statement for a single flat."""
     total = int(total + 0.5)
+
+    if meter_units is None:
+        meter_units = max(0.0, float(consumed) - float(com_area_val)) if tenant_type == "DOMESTIC" else float(consumed)
+    else:
+        meter_units = float(meter_units)
+
     water_row = f"<tr><td class='td-item'>Water Utility Charges</td><td class='td-item' style='text-align: right;'><b>Rs. {cfg.get('water', 0.0):.2f}</b></td></tr>" if tenant_type == "COMMERCIAL" else ""
-    common_row = f"<tr><td class='td-item'>Common Area Share Units</td><td class='td-item' style='text-align: right;'><b>{com_area_val:.2f} Units</b></td></tr>" if tenant_type == "DOMESTIC" else ""
+
+    if tenant_type == "DOMESTIC" and com_area_val > 0:
+        metrics_box_html = f"""
+        <div class='metrics-box'>
+            <b>Meter Readings:</b> Opening [<b>{prev_r:.2f}</b>] | Closing [<b>{float_curr:.2f}</b>] | Consumed Units: <b>{meter_units:.2f}</b><br/>
+            <b>Units Calculation:</b> Consumed Units [<b>{meter_units:.2f}</b>] + Common Area Share [<b>{com_area_val:.2f}</b>] = <b>Total Consumed Units: {consumed:.2f}</b>
+        </div>"""
+        elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges (Total <b>{consumed:.2f}</b> Consumed Units)</td><td class='td-item' style='text-align: right;'><b>Rs. {elec_charge:.2f}</b></td></tr>"
+    else:
+        metrics_box_html = f"""
+        <div class='metrics-box'>
+            <b>Meter Readings:</b> Opening [<b>{prev_r:.2f}</b>] | Closing [<b>{float_curr:.2f}</b>] | Total Consumed Units: <b>{consumed:.2f}</b>
+        </div>"""
+        elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges</td><td class='td-item' style='text-align: right;'><b>Rs. {elec_charge:.2f}</b></td></tr>"
 
     fixed_val = cfg.get("fixed", 0.0)
     if isinstance(fixed_val, list):
@@ -137,19 +156,14 @@ def generate_html_single_bill(flat_no, cfg, due_month_str, due_year_str, prev_r,
             </tr>
         </table>
         <div class='section-gap'></div>
-        <div class='metrics-box'>
-            <b>Meter Readings:</b> Opening [<b>{prev_r}</b>] | Closing [<b>{float_curr}</b>] | Total Consumed Units: <b>{consumed:.2f}</b>
-        </div>
+        {metrics_box_html}
         <div class='section-gap'></div>
         <table width='100%' cellspacing='0' cellpadding='0'>
             <tr>
                 <td class='th-item'><b>Charge Description Item</b></td>
                 <td class='th-item' style='text-align: right;'><b>Amount (Rs.)</b></td>
             </tr>
-            <tr>
-                <td class='td-item'>Electricity Consumption Charges</td>
-                <td class='td-item' style='text-align: right;'><b>Rs. {elec_charge:.2f}</b></td>
-            </tr>
+            {elec_row}
             <tr>
                 <td class='td-item'>Fixed Meter Maintenance Charges</td>
                 <td class='td-item' style='text-align: right;'><b>Rs. {float(fixed_val):.2f}</b></td>
@@ -159,7 +173,6 @@ def generate_html_single_bill(flat_no, cfg, due_month_str, due_year_str, prev_r,
                 <td class='td-item' style='text-align: right;'><b>Rs. {cfg.get('tax', 0.0):.2f}</b></td>
             </tr>
             {water_row}
-            {common_row}
             <tr>
                 <td class='td-item'>Building Maintenance Fund</td>
                 <td class='td-item' style='text-align: right;'><b>Rs. {cfg.get('maintenance', 0.0):.2f}</b></td>
@@ -224,10 +237,17 @@ def generate_html_grouped_invoice(records, due_month_str, due_year_str, tenant_t
                 <td class='td-item' style='text-align:right;'><b>Rs. {float(r.get('Electric_Charges_Rs',0) or 0):.2f}</b></td>
             </tr>"""
 
-    common_row = ""
     if tenant_type == "DOMESTIC":
         common_units = sum(float(r.get("Common_Area_Units", 0) or 0) for r in records)
-        common_row = f"<tr><td class='td-item'>Common Area Share Units</td><td class='td-item' style='text-align:right;'><b>{common_units:.2f} Units</b></td></tr>"
+        if common_units > 0:
+            metrics_box_html = f"<div class='metrics-box'><b>Combined Meter Consumption:</b> Consumed Units: <b>{total_units:.2f}</b> + Common Area Share: <b>{common_units:.2f}</b> = <b>Total Consumed Units: {total_units + common_units:.2f}</b> across <b>{len(records)}</b> flat(s)</div>"
+            elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges (Total <b>{total_units + common_units:.2f}</b> Consumed Units)</td><td class='td-item' style='text-align:right;'><b>Rs. {total_elec:.2f}</b></td></tr>"
+        else:
+            metrics_box_html = f"<div class='metrics-box'><b>Combined Meter Consumption:</b> Total Units: <b>{total_units:.2f}</b> across <b>{len(records)}</b> flat(s)</div>"
+            elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges</td><td class='td-item' style='text-align:right;'><b>Rs. {total_elec:.2f}</b></td></tr>"
+    else:
+        metrics_box_html = f"<div class='metrics-box'><b>Combined Meter Consumption:</b> Total Units: <b>{total_units:.2f}</b> across <b>{len(records)}</b> flat(s)</div>"
+        elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges</td><td class='td-item' style='text-align:right;'><b>Rs. {total_elec:.2f}</b></td></tr>"
 
     return f"""
     <div style='margin-bottom:3px; page-break-after:always; page-break-inside:avoid;'>
@@ -241,7 +261,7 @@ def generate_html_grouped_invoice(records, due_month_str, due_year_str, tenant_t
             <tr><td><b>Flat Nos:</b> <b>{', '.join(flat_names)}</b></td><td style='text-align:right;'><b>Issue Date:</b> <b>{datetime.now().strftime('%d-%m-%Y')}</b></td></tr>
         </table>
         <div class='section-gap'></div>
-        <div class='metrics-box'><b>Combined Meter Consumption:</b> Total Units: <b>{total_units:.2f}</b> across <b>{len(records)}</b> flat(s)</div>
+        {metrics_box_html}
         <div class='section-gap'></div>
         <table width='100%' cellspacing='0' cellpadding='0'>
             <tr><td class='th-item'><b>Flat</b></td><td class='th-item' style='text-align:right;'><b>Opening</b></td><td class='th-item' style='text-align:right;'><b>Closing</b></td><td class='th-item' style='text-align:right;'><b>Units</b></td><td class='th-item' style='text-align:right;'><b>Electricity</b></td></tr>
@@ -250,11 +270,10 @@ def generate_html_grouped_invoice(records, due_month_str, due_year_str, tenant_t
         <div class='section-gap'></div>
         <table width='100%' cellspacing='0' cellpadding='0'>
             <tr><td class='th-item'><b>Combined Charge Description</b></td><td class='th-item' style='text-align:right;'><b>Amount (Rs.)</b></td></tr>
-            <tr><td class='td-item'>Electricity Consumption Charges</td><td class='td-item' style='text-align:right;'><b>Rs. {total_elec:.2f}</b></td></tr>
+            {elec_row}
             <tr><td class='td-item'>Fixed Meter Maintenance Charges (<b>{len(records)}</b> flats)</td><td class='td-item' style='text-align:right;'><b>Rs. {total_fixed:.2f}</b></td></tr>
             <tr><td class='td-item'>Municipal Property Tax</td><td class='td-item' style='text-align:right;'><b>Rs. {total_tax:.2f}</b></td></tr>
             {water_row}
-            {common_row}
             <tr><td class='td-item'>Building Maintenance Fund (<b>{len(records)}</b> flats)</td><td class='td-item' style='text-align:right;'><b>Rs. {total_maint:.2f}</b></td></tr>
             <tr><td class='td-item'>Lift Operational Share Fee (combined)</td><td class='td-item' style='text-align:right;'><b>Rs. {total_lift:.2f}</b></td></tr>
             <tr><td class='td-item'>Miscellaneous / Others Overheads</td><td class='td-item' style='text-align:right;'><b>Rs. {total_others:.2f}</b></td></tr>
