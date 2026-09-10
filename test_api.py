@@ -104,5 +104,24 @@ status_after_logout = app.auth_status(x_admin_token=admin_token)
 assert status_after_logout["is_admin"] is False
 print("8e. Admin logout & token invalidation: OK")
 
-print('\n[SUCCESS] ALL 8 BACKEND API, CALCULATION & ADMIN AUTH TESTS PASSED PERFECTLY!')
+# 9. Test Domestic Dues Overview & Flat Selection
+dom_dues_all = app.get_dues_overview(mode='DOMESTIC', flat='ALL FLATS')
+assert dom_dues_all['mode'] == 'DOMESTIC'
+assert len(dom_dues_all['flats']) == 19
+assert 'A-2' in dom_dues_all['flats']
+assert 'G-4' in dom_dues_all['flats']
+assert dom_dues_all['flat_tenants']['A-2'] == 'BSA'
+assert dom_dues_all['total_due'] > 0
+assert dom_dues_all['balance_left'] > 0
+
+dom_dues_flat = app.get_dues_overview(mode='DOMESTIC', flat='A-2')
+assert dom_dues_flat['selected_flat'] == 'A-2'
+assert len(dom_dues_flat['records']) > 0
+assert all(r['Flat_No'] == 'A-2' for r in dom_dues_flat['records'])
+expected_balance = round(dom_dues_flat['total_due'] - dom_dues_flat['total_paid'], 2)
+assert round(dom_dues_flat['balance_left'], 2) == expected_balance
+print(f"9. Domestic Dues API & Flat Filter: OK (Flats: {len(dom_dues_all['flats'])}, Flat A-2 Due: Rs. {dom_dues_flat['total_due']:,.2f}, Balance: Rs. {dom_dues_flat['balance_left']:,.2f})")
+
+print('\n[SUCCESS] ALL 9 BACKEND API, CALCULATION, DUES & ADMIN AUTH TESTS PASSED PERFECTLY!')
+
 

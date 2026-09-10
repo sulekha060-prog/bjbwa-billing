@@ -1,13 +1,14 @@
 """
 PDF Generator for Basant Jamini Bhawan Welfare Association
-Generates high-quality A4 PDF statements with white backgrounds, bold headlines,
-reinforced 2px borders, and bold numbers.
+Generates high-precision A4 PDF statements matching the exact physical billing layout
+with standard 2-column description & amount format, clear lines, and structured notes.
 """
 
 import io
+import re
 from datetime import datetime
 from xhtml2pdf import pisa
-from billing_core import canonical_flat
+from billing_core import canonical_flat, RATE_COMMERCIAL, RATE_DOMESTIC, DEFAULT_NOTICE_TEXT
 
 PDF_HTML_WRAPPER = """
 <html>
@@ -16,16 +17,93 @@ PDF_HTML_WRAPPER = """
     <style>
         @page {{
             size: a4 portrait;
-            margin: 22pt 30pt 20pt 30pt;
+            margin: 10mm 16mm 8mm 16mm;
         }}
         body {{
-            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-family: Arial, Helvetica, sans-serif;
             color: #000000;
-            font-size: 14px;
+            font-size: 10pt;
             margin: 0;
             padding: 0;
             background-color: #ffffff;
         }}
+        table.header-box {{
+            width: 100%;
+            border: 1.2px solid #000000;
+            border-collapse: collapse;
+            margin-bottom: 14px;
+        }}
+        table.header-box td {{
+            border: 0;
+            text-align: center;
+            padding: 6px 4px;
+            line-height: 1.35;
+        }}
+        .title {{
+            font-size: 11pt;
+            font-weight: bold;
+            letter-spacing: 0.2px;
+        }}
+        .sub-title {{
+            font-size: 9.5pt;
+            font-weight: bold;
+        }}
+        .charge-title {{
+            font-size: 10pt;
+            font-weight: bold;
+            padding-top: 2px;
+        }}
+        .meta-table {{
+            width: 100%;
+            margin-bottom: 5px;
+            font-size: 9.5pt;
+            font-weight: bold;
+        }}
+        .meta-table td {{
+            border: 0 !important;
+            padding: 2px 1px;
+        }}
+        .main-table {{
+            width: 100%;
+            border-collapse: collapse;
+            border: 1.2px solid #000000;
+        }}
+        .main-table th, .main-table td {{
+            border: 1px solid #000000;
+            padding: 3px 5px;
+            font-size: 9pt;
+            vertical-align: middle;
+        }}
+        .col-desc {{
+            width: 86%;
+        }}
+        .col-rs {{
+            width: 10.5%;
+            text-align: center;
+        }}
+        .col-p {{
+            width: 3.5%;
+            text-align: center;
+        }}
+        .center {{
+            text-align: center;
+        }}
+        .right {{
+            text-align: right;
+        }}
+        .bold {{
+            font-weight: bold;
+        }}
+        .inner-tbl {{
+            width: 100%;
+            border-collapse: collapse;
+        }}
+        .inner-tbl td {{
+            border: 0 !important;
+            padding: 0 !important;
+            font-size: 9pt;
+        }}
+        /* Legacy & Fallback Styles */
         .header-table {{
             background-color: #ffffff;
             border: 2px solid #000000;
@@ -44,9 +122,10 @@ PDF_HTML_WRAPPER = """
             font-weight: bold;
             padding-top: 4px;
         }}
-        .meta-table {{
+        .meta-table-dom {{
             font-size: 14px;
             line-height: 1.2;
+            width: 100%;
         }}
         .metrics-box {{
             background-color: #ffffff;
@@ -105,110 +184,531 @@ PDF_HTML_WRAPPER = """
 </html>
 """
 
-def generate_html_single_bill(flat_no, cfg, due_month_str, due_year_str, prev_r, float_curr, consumed, elec_charge, others_val, total, tenant_type, com_area_val, notice_content, meter_units=None):
-    """Generates the HTML statement for a single flat."""
+def fmt_num(v):
+    if v is None or v == '' or v == 0:
+        return ''
+    try:
+        fv = float(v)
+        return f"{int(fv + 0.5)}" if abs(fv - round(fv)) < 0.01 else f"{fv:.2f}"
+    except (ValueError, TypeError):
+        return str(v)
+
+def build_notice_rows_html(raw_text=None):
+    """Dynamically builds HTML table rows for the NOTE section from the Invoice Notices."""
+    if not raw_text or not str(raw_text).strip():
+        raw_text = DEFAULT_NOTICE_TEXT
+
+    lines = [ln.strip() for ln in str(raw_text).strip().split('\n') if ln.strip()]
+    items = []
+    curr_item = []
+
+    prefix_re = re.compile(r'^(?:[ivxIVX]+\s*[\)\.]|\d+[\)\.]|[•\-\*])\s*')
+    header_re = re.compile(r'^(?:note\s*:?|important notice.*:?)$', re.IGNORECASE)
+
+    for line in lines:
+        if header_re.match(line):
+            continue
+        if prefix_re.match(line):
+            if curr_item:
+                items.append(' '.join(curr_item))
+                curr_item = []
+            curr_item.append(line)
+        else:
+            if curr_item:
+                curr_item.append(line)
+            else:
+                curr_item = [line]
+
+    if curr_item:
+        items.append(' '.join(curr_item))
+
+    if not items:
+        items = [str(raw_text).strip()]
+
+    rows_html = [
+        "<tr>",
+        "  <td style='font-weight: bold; font-size: 8.5pt; padding-left: 15px;'>NOTE :</td>",
+        "  <td class='col-rs'></td>",
+        "  <td class='col-p'></td>",
+        "</tr>"
+    ]
+
+    for itm in items:
+        rows_html.append("<tr>")
+        rows_html.append(f"  <td style='font-size: 7.6pt; line-height: 1.2;'>{itm}</td>")
+        rows_html.append("  <td class='col-rs'></td>")
+        rows_html.append("  <td class='col-p'></td>")
+        rows_html.append("</tr>")
+
+    return '\n'.join(rows_html)
+
+
+def generate_html_single_bill(
+    flat_no, cfg, due_month_str, due_year_str, prev_r, float_curr, consumed,
+    elec_charge, others_val, total, tenant_type, com_area_val=0.0,
+    notice_content=None, meter_units=None, rpu_val=None
+):
+    """Generates the HTML statement for a single flat matching exact physical formats."""
     total = int(total + 0.5)
+    yr_display = str(due_year_str)[-2:] if len(str(due_year_str)) == 4 else str(due_year_str)
+
+    if tenant_type == "COMMERCIAL":
+        period_display = f"{due_month_str.title()[:3]}-{yr_display}"
+        if rpu_val is None:
+            rpu_val = RATE_COMMERCIAL
+
+        elec_str = f"{int(elec_charge + 0.5)}"
+        fixed_val = cfg.get('fixed', 0.0)
+        if isinstance(fixed_val, list):
+            fixed_val = fixed_val[0].get("val", 0.0) if fixed_val else 0.0
+        fixed_str = fmt_num(float(fixed_val or 0.0))
+        tax_val = cfg.get('tax', 0.0)
+        tax_str = fmt_num(float(tax_val or 0.0))
+        water_val = cfg.get('water', 0.0)
+        water_str = fmt_num(float(water_val or 0.0))
+        maint_val = cfg.get('maintenance', 0.0)
+        maint_str = fmt_num(float(maint_val or 0.0))
+        lift_val = cfg.get('lift', 0.0)
+        lift_str = fmt_num(float(lift_val or 0.0))
+        others_str = fmt_num(float(others_val or 0.0))
+        total_str = f"{total}"
+
+        consumed_int = int(consumed + 0.5) if abs(consumed - round(consumed)) < 0.01 else f"{consumed:.2f}"
+        prev_int = int(prev_r + 0.5) if abs(prev_r - round(prev_r)) < 0.01 else f"{prev_r:.2f}"
+        curr_int = int(float_curr + 0.5) if abs(float_curr - round(float_curr)) < 0.01 else f"{float_curr:.2f}"
+
+        others_row = f"""
+        <tr>
+          <td>Miscellaneous / Others Overheads</td>
+          <td class="col-rs center">{others_str}</td>
+          <td class="col-p"></td>
+        </tr>""" if others_val and others_val > 0 else ""
+
+        html = f"""
+        <div style='page-break-after: always; page-break-inside: avoid;'>
+          <!-- Header Box -->
+          <table class="header-box" cellspacing="0" cellpadding="0">
+            <tr>
+              <td>
+                <span class="title">BASANT JAMINI BHAWAN WELFARE ASSOCIATION</span><br/>
+                <span class="sub-title">Contractor's Area Road No. 2 Bistupur, Jamshedpur - 831001</span><br/>
+                <span class="charge-title">Monthly Maintenance Charge</span>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Meta Info -->
+          <table class="meta-table" cellspacing="0" cellpadding="0">
+            <tr>
+              <td style="width: 55%;">Name : {cfg.get('tenant', 'N/A')}</td>
+              <td style="width: 45%;"></td>
+            </tr>
+            <tr>
+              <td>Flat No. {flat_no}</td>
+              <td style="text-align: right;">Due Month &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {period_display}</td>
+            </tr>
+          </table>
+
+          <!-- Main Table -->
+          <table class="main-table" cellspacing="0" cellpadding="0">
+            <tr>
+              <td class="col-desc center bold" style="font-size: 9.5pt;">DESCRIPTION</td>
+              <td colspan="2" class="center bold" style="font-size: 9.5pt;">AMOUNT</td>
+            </tr>
+            <tr>
+              <td>&nbsp;</td>
+              <td class="col-rs center bold" style="font-size: 8.5pt;">Rs.</td>
+              <td class="col-p center bold" style="font-size: 8.5pt;">P.</td>
+            </tr>
+            <tr>
+              <td class="center">{flat_no}</td>
+              <td class="col-rs"></td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>
+                <table class="inner-tbl">
+                  <tr>
+                    <td style="width: 46%;">Closing Meter Reading</td>
+                    <td style="width: 54%; text-align: center;">{curr_int}</td>
+                  </tr>
+                </table>
+              </td>
+              <td class="col-rs"></td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>
+                <table class="inner-tbl">
+                  <tr>
+                    <td style="width: 46%;">Opening Meter Reading</td>
+                    <td style="width: 54%; text-align: center;">{prev_int}</td>
+                  </tr>
+                </table>
+              </td>
+              <td class="col-rs"></td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>
+                <table class="inner-tbl">
+                  <tr>
+                    <td style="width: 46%;">Chargeable Unit</td>
+                    <td style="width: 54%; text-align: center;">{consumed_int}</td>
+                  </tr>
+                </table>
+              </td>
+              <td class="col-rs"></td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>Total unit Consumed As per individual meter : &nbsp;&nbsp;&nbsp;&nbsp; {consumed_int} &nbsp;&nbsp;&nbsp;&nbsp; units ( {flat_no} )</td>
+              <td class="col-rs"></td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>Electric Charges ( Commercial )</td>
+              <td class="col-rs"></td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>
+                <table class="inner-tbl">
+                  <tr>
+                    <td style="width: 8%;"></td>
+                    <td style="width: 22%;">Meter unit</td>
+                    <td style="width: 70%;">Elec. Charge / Unit ( in Rs.)</td>
+                  </tr>
+                </table>
+              </td>
+              <td class="col-rs"></td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>
+                <table class="inner-tbl">
+                  <tr>
+                    <td style="width: 8%;">{flat_no}</td>
+                    <td style="width: 22%;">{consumed_int}</td>
+                    <td style="width: 70%;">{rpu_val:.2f}/-</td>
+                  </tr>
+                </table>
+              </td>
+              <td class="col-rs center">{elec_str}</td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>Fixed Meter Charges : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ( {flat_no} : Rs. {fixed_str}/-)</td>
+              <td class="col-rs center">{fixed_str}</td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>Municipal Tax</td>
+              <td class="col-rs center">{tax_str}</td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>
+                <table class="inner-tbl">
+                  <tr>
+                    <td style="width: 46%;">Water Charges</td>
+                    <td style="width: 54%; text-align: center;">{flat_no}</td>
+                  </tr>
+                </table>
+              </td>
+              <td class="col-rs center">{water_str}</td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>
+                <table class="inner-tbl">
+                  <tr>
+                    <td style="width: 46%;">Building Maint. fund :</td>
+                    <td style="width: 54%; text-align: center;">{flat_no}</td>
+                  </tr>
+                </table>
+              </td>
+              <td class="col-rs center">{maint_str}</td>
+              <td class="col-p"></td>
+            </tr>
+            <tr>
+              <td>Lift Charges</td>
+              <td class="col-rs center">{lift_str}</td>
+              <td class="col-p"></td>
+            </tr>
+            {others_row}
+            <tr>
+              <td class="right bold" style="font-size: 9.5pt; padding-right: 14px;">TOTAL</td>
+              <td class="col-rs center bold" style="font-size: 9.5pt;">{total_str}</td>
+              <td class="col-p"></td>
+            </tr>
+            {build_notice_rows_html(notice_content)}
+          </table>
+        </div>
+        """
+        return html
+
+    # DOMESTIC RESIDENT EXACT FORMAT (Matching exact user uploaded reference)
+    MONTH_MAP = {
+        'JAN': 'January', 'FEB': 'February', 'MAR': 'March', 'APR': 'April',
+        'MAY': 'May', 'JUN': 'June', 'JUL': 'July', 'AUG': 'August',
+        'SEP': 'September', 'OCT': 'October', 'NOV': 'November', 'DEC': 'December'
+    }
+    m_key = str(due_month_str).strip().upper()[:3]
+    month_full = MONTH_MAP.get(m_key, str(due_month_str).title())
+    period_display = f"{month_full} {yr_display}"
+
+    if rpu_val is None:
+        rpu_val = RATE_DOMESTIC
 
     if meter_units is None:
-        meter_units = max(0.0, float(consumed) - float(com_area_val)) if tenant_type == "DOMESTIC" else float(consumed)
+        meter_units = max(0.0, float(consumed) - float(com_area_val or 0.0))
     else:
         meter_units = float(meter_units)
 
-    water_row = f"<tr><td class='td-item'>Water Utility Charges</td><td class='td-item' style='text-align: right;'><b>Rs. {cfg.get('water', 0.0):.2f}</b></td></tr>" if tenant_type == "COMMERCIAL" else ""
+    common_units = float(com_area_val or 0.0)
+    total_chargeable = meter_units + common_units
 
-    if tenant_type == "DOMESTIC" and com_area_val > 0:
-        metrics_box_html = f"""
-        <div class='metrics-box'>
-            <b>Meter Readings:</b> Opening [<b>{prev_r:.2f}</b>] | Closing [<b>{float_curr:.2f}</b>] | Consumed Units: <b>{meter_units:.2f}</b><br/>
-            <b>Units Calculation:</b> Consumed Units [<b>{meter_units:.2f}</b>] + Common Area Share [<b>{com_area_val:.2f}</b>] = <b>Total Consumed Units: {consumed:.2f}</b>
-        </div>"""
-        elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges (Total <b>{consumed:.2f}</b> Consumed Units)</td><td class='td-item' style='text-align: right;'><b>Rs. {elec_charge:.2f}</b></td></tr>"
-    else:
-        metrics_box_html = f"""
-        <div class='metrics-box'>
-            <b>Meter Readings:</b> Opening [<b>{prev_r:.2f}</b>] | Closing [<b>{float_curr:.2f}</b>] | Total Consumed Units: <b>{consumed:.2f}</b>
-        </div>"""
-        elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges</td><td class='td-item' style='text-align: right;'><b>Rs. {elec_charge:.2f}</b></td></tr>"
+    meter_u_int = int(meter_units + 0.5) if abs(meter_units - round(meter_units)) < 0.01 else f"{meter_units:.2f}"
+    common_u_int = int(common_units + 0.5) if abs(common_units - round(common_units)) < 0.01 else f"{common_units:.2f}"
+    chargeable_u_int = int(total_chargeable + 0.5) if abs(total_chargeable - round(total_chargeable)) < 0.01 else f"{total_chargeable:.2f}"
 
-    fixed_val = cfg.get("fixed", 0.0)
+    prev_int = int(prev_r + 0.5) if abs(prev_r - round(prev_r)) < 0.01 else f"{prev_r:.2f}"
+    curr_int = int(float_curr + 0.5) if abs(float_curr - round(float_curr)) < 0.01 else f"{float_curr:.2f}"
+
+    elec_str = f"{int(elec_charge + 0.5)}"
+    fixed_val = cfg.get('fixed', 0.0)
     if isinstance(fixed_val, list):
         fixed_val = fixed_val[0].get("val", 0.0) if fixed_val else 0.0
+    fixed_str = fmt_num(float(fixed_val or 0.0))
+    tax_val = cfg.get('tax', 0.0)
+    tax_str = fmt_num(float(tax_val or 0.0))
+    maint_val = cfg.get('maintenance', 0.0)
+    maint_str = fmt_num(float(maint_val or 0.0))
+    lift_val = cfg.get('lift', 0.0)
+    lift_str = fmt_num(float(lift_val or 0.0))
+    others_str = fmt_num(float(others_val or 0.0))
+    total_str = f"{total}"
 
-    return f"""
-    <div style='margin-bottom: 3px; page-break-after: always; page-break-inside: avoid;'>
-        <table width='100%' class='header-table' cellspacing='0'>
-            <tr>
-                <td>
-                    <div class='header-title'>BASANT JAMINI BHAWAN WELFARE ASSOCIATION</div>
-                    <div class='header-subtitle'>Monthly Maintenance & Electricity Statement [{tenant_type}]</div>
-                </td>
-            </tr>
+    others_row = f"""
+    <tr>
+      <td>Miscellaneous / Others Overheads</td>
+      <td class="col-rs center">{others_str}</td>
+      <td class="col-p"></td>
+    </tr>""" if others_val and others_val > 0 else ""
+
+    lift_row = f"""
+    <tr>
+      <td>
+        <table class="inner-tbl">
+          <tr>
+            <td style="width: 46%;">Lift Charges</td>
+            <td style="width: 54%; text-align: center;">( {flat_no} )</td>
+          </tr>
         </table>
-        <div class='section-gap'></div>
-        <table width='100%' class='meta-table' cellspacing='0'>
-            <tr>
-                <td><b>Flat No:</b> <b>{flat_no}</b></td>
-                <td style='text-align: right;'><b>Billing Period:</b> <b>{due_month_str}-{due_year_str}</b></td>
-            </tr>
-            <tr>
-                <td><b>Resident Name:</b> <b>{cfg.get('tenant', 'N/A')}</b></td>
-                <td style='text-align: right;'><b>Issue Date:</b> <b>{datetime.now().strftime('%d-%m-%Y')}</b></td>
-            </tr>
+      </td>
+      <td class="col-rs center">{lift_str}</td>
+      <td class="col-p"></td>
+    </tr>""" if lift_val and lift_val > 0 else """
+    <tr>
+      <td>
+        <table class="inner-tbl">
+          <tr>
+            <td style="width: 46%;">Lift Charges</td>
+            <td style="width: 54%; text-align: center;">( {flat_no} )</td>
+          </tr>
         </table>
-        <div class='section-gap'></div>
-        {metrics_box_html}
-        <div class='section-gap'></div>
-        <table width='100%' cellspacing='0' cellpadding='0'>
-            <tr>
-                <td class='th-item'><b>Charge Description Item</b></td>
-                <td class='th-item' style='text-align: right;'><b>Amount (Rs.)</b></td>
-            </tr>
-            {elec_row}
-            <tr>
-                <td class='td-item'>Fixed Meter Maintenance Charges</td>
-                <td class='td-item' style='text-align: right;'><b>Rs. {float(fixed_val):.2f}</b></td>
-            </tr>
-            <tr>
-                <td class='td-item'>Municipal Property Tax</td>
-                <td class='td-item' style='text-align: right;'><b>Rs. {cfg.get('tax', 0.0):.2f}</b></td>
-            </tr>
-            {water_row}
-            <tr>
-                <td class='td-item'>Building Maintenance Fund</td>
-                <td class='td-item' style='text-align: right;'><b>Rs. {cfg.get('maintenance', 0.0):.2f}</b></td>
-            </tr>
-            <tr>
-                <td class='td-item'>Lift Operational Share Fee</td>
-                <td class='td-item' style='text-align: right;'><b>Rs. {cfg.get('lift', 0.0):.2f}</b></td>
-            </tr>
-            <tr>
-                <td class='td-item'>Miscellaneous / Others Overheads</td>
-                <td class='td-item' style='text-align: right;'><b>Rs. {others_val:.2f}</b></td>
-            </tr>
-        </table>
-        <div class='section-gap'></div>
-        <div class='total-box'>
-            <b>CUMULATIVE GROSS AMOUNT DUE: Rs. {total:.0f}</b>
-        </div>
-        <div class='section-gap'></div>
-        <div class='notice-box'>
-            {notice_content.replace(chr(10), '<br/>')}
-        </div>
-        <div class='section-gap'></div>
-        <div class='footer-text'>
-            This is a computer-generated digital statement issued by Basant Jamini Bhawan Welfare Association Hub.
-        </div>
+      </td>
+      <td class="col-rs center"></td>
+      <td class="col-p"></td>
+    </tr>"""
+
+    tenant_name_raw = cfg.get('tenant', 'N/A')
+    tenant_name_display = "B S A" if str(tenant_name_raw).strip().upper() == "BSA" else str(tenant_name_raw)
+
+    html = f"""
+    <div style='page-break-after: always; page-break-inside: avoid;'>
+      <table class="header-box" cellspacing="0" cellpadding="0">
+        <tr>
+          <td>
+            <span class="title">BASANT JAMINI BHAWAN WELFARE ASSOCIATION</span><br/>
+            <span class="sub-title">Contractor's Area Road No. 2 Bistupur, Jamshedpur - 831001</span><br/>
+            <span class="charge-title">Monthly Maintenance Charge</span>
+          </td>
+        </tr>
+      </table>
+
+      <table class="meta-table" cellspacing="0" cellpadding="0">
+        <tr>
+          <td style="width: 55%;">Name : {tenant_name_display}</td>
+          <td style="width: 45%;"></td>
+        </tr>
+        <tr>
+          <td>Flat No. ( {flat_no} )</td>
+          <td style="text-align: right;">Due Month &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {period_display}</td>
+        </tr>
+      </table>
+
+      <table class="main-table" cellspacing="0" cellpadding="0">
+        <tr>
+          <td class="col-desc center bold" style="font-size: 9.5pt;">DESCRIPTION</td>
+          <td colspan="2" class="center bold" style="font-size: 9.5pt;">AMOUNT</td>
+        </tr>
+        <tr>
+          <td>&nbsp;</td>
+          <td class="col-rs center bold" style="font-size: 8.5pt;">Rs.</td>
+          <td class="col-p center bold" style="font-size: 8.5pt;">P.</td>
+        </tr>
+        <tr>
+          <td class="center">{flat_no}</td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 46%;">Closing Meter Reading</td>
+                <td style="width: 54%; text-align: center;">{curr_int}</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 46%;">Opening Meter Reading</td>
+                <td style="width: 54%; text-align: center;">{prev_int}</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 46%;">Meter Reading Unit</td>
+                <td style="width: 54%; text-align: center;">{meter_u_int} Units</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 46%;">Common Area Electricity charges</td>
+                <td style="width: 54%; text-align: center;">{common_u_int} Units</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Total Chargeable Unit &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ( {meter_u_int} + {common_u_int} ) = {chargeable_u_int} units &nbsp;&nbsp;&nbsp;&nbsp; ( {flat_no} )</td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Electric Charges ( Residential )</td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 14%;">&nbsp;</td>
+                <td style="width: 32%; text-align: center;">Total Chageable unit</td>
+                <td style="width: 54%; text-align: center;">Elec. Charge / Unit ( in Rs.)</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 14%;">{flat_no}</td>
+                <td style="width: 32%; text-align: center;">{chargeable_u_int}</td>
+                <td style="width: 54%; text-align: center;">{rpu_val:.2f}/-</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs center">{elec_str}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 46%;">Fixed Meter Charges</td>
+                <td style="width: 54%; text-align: center;">( {flat_no} )</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs center">{fixed_str}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Municipal Tax</td>
+          <td class="col-rs center">{tax_str}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Water Charges</td>
+          <td class="col-rs center"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 46%;">Building Maint. fund</td>
+                <td style="width: 54%; text-align: center;">( {flat_no} )</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs center">{maint_str}</td>
+          <td class="col-p"></td>
+        </tr>
+        {lift_row}
+        {others_row}
+        <tr>
+          <td class="right bold" style="font-size: 9.5pt; padding-right: 14px;">TOTAL</td>
+          <td class="col-rs center bold" style="font-size: 9.5pt;">{total_str}</td>
+          <td class="col-p"></td>
+        </tr>
+        {build_notice_rows_html(notice_content)}
+      </table>
     </div>
     """
+    return html
 
-def generate_html_grouped_invoice(records, due_month_str, due_year_str, tenant_type, notice_content):
-    """Generates a consolidated multi-flat invoice statement (e.g. for JHD owning A-1, F-1, F-2)."""
+def generate_html_grouped_invoice(records, due_month_str, due_year_str, tenant_type, notice_content=None, rpu_val=None):
+    """Create one invoice page for a resident owning multiple flats (e.g. JHD A-1, F-1, F-2)."""
     if not records:
         return ""
 
+    if rpu_val is None:
+        rpu_val = RATE_COMMERCIAL if tenant_type == "COMMERCIAL" else RATE_DOMESTIC
+
+    # Stable flat order for JHD: A-1, F-1, F-2
     records = sorted(records, key=lambda r: {"A-1": 0, "F-1": 1, "F-2": 2}.get(canonical_flat(r.get("Flat_No", "")), 99))
     tenant = str(records[0].get("Tenant_Name", "JHD"))
-    flat_names = [canonical_flat(r.get("Flat_No", "")) for r in records]
+
+    yr_display = str(due_year_str)[-2:] if len(str(due_year_str)) == 4 else str(due_year_str)
+    period_display = f"{due_month_str.title()[:3]} {yr_display}"
 
     total_elec = sum(float(r.get("Electric_Charges_Rs", 0) or 0) for r in records)
     total_fixed = sum(float(r.get("Fixed_Meter_Charges_Rs", 0) or 0) for r in records)
@@ -220,72 +720,256 @@ def generate_html_grouped_invoice(records, due_month_str, due_year_str, tenant_t
     total_gross = int(total_elec + total_fixed + total_tax + total_water + total_maint + total_lift + total_others + 0.5)
     total_units = sum(float(r.get("Consumed_Units", 0) or 0) for r in records)
 
-    water_row = f"<tr><td class='td-item'>Water Utility Charges</td><td class='td-item' style='text-align:right;'><b>Rs. {total_water:.2f}</b></td></tr>" if tenant_type == "COMMERCIAL" else ""
+    # Map readings per flat
+    rec_map = {canonical_flat(r.get("Flat_No", "")): r for r in records}
+    r_a1 = rec_map.get("A-1", records[0] if len(records) > 0 else {})
+    r_f1 = rec_map.get("F-1", records[1] if len(records) > 1 else {})
+    r_f2 = rec_map.get("F-2", records[2] if len(records) > 2 else {})
 
-    flat_rows = ""
-    for r in records:
-        flat = canonical_flat(r.get("Flat_No", ""))
-        op = float(r.get("Open_Meter_Reading", 0) or 0)
-        cl = float(r.get("Closing_Meter_Reading", 0) or 0)
-        units = float(r.get("Consumed_Units", 0) or 0)
-        flat_rows += f"""
-            <tr>
-                <td class='td-item'><b>{flat}</b></td>
-                <td class='td-item' style='text-align:right;'><b>{op:.2f}</b></td>
-                <td class='td-item' style='text-align:right;'><b>{cl:.2f}</b></td>
-                <td class='td-item' style='text-align:right;'><b>{units:.2f}</b></td>
-                <td class='td-item' style='text-align:right;'><b>Rs. {float(r.get('Electric_Charges_Rs',0) or 0):.2f}</b></td>
-            </tr>"""
+    cl_a1 = fmt_num(float(r_a1.get("Closing_Meter_Reading", 0) or 0))
+    cl_f1 = fmt_num(float(r_f1.get("Closing_Meter_Reading", 0) or 0))
+    cl_f2 = fmt_num(float(r_f2.get("Closing_Meter_Reading", 0) or 0))
 
-    if tenant_type == "DOMESTIC":
-        common_units = sum(float(r.get("Common_Area_Units", 0) or 0) for r in records)
-        if common_units > 0:
-            metrics_box_html = f"<div class='metrics-box'><b>Combined Meter Consumption:</b> Consumed Units: <b>{total_units:.2f}</b> + Common Area Share: <b>{common_units:.2f}</b> = <b>Total Consumed Units: {total_units + common_units:.2f}</b> across <b>{len(records)}</b> flat(s)</div>"
-            elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges (Total <b>{total_units + common_units:.2f}</b> Consumed Units)</td><td class='td-item' style='text-align:right;'><b>Rs. {total_elec:.2f}</b></td></tr>"
-        else:
-            metrics_box_html = f"<div class='metrics-box'><b>Combined Meter Consumption:</b> Total Units: <b>{total_units:.2f}</b> across <b>{len(records)}</b> flat(s)</div>"
-            elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges</td><td class='td-item' style='text-align:right;'><b>Rs. {total_elec:.2f}</b></td></tr>"
-    else:
-        metrics_box_html = f"<div class='metrics-box'><b>Combined Meter Consumption:</b> Total Units: <b>{total_units:.2f}</b> across <b>{len(records)}</b> flat(s)</div>"
-        elec_row = f"<tr><td class='td-item'>Electricity Consumption Charges</td><td class='td-item' style='text-align:right;'><b>Rs. {total_elec:.2f}</b></td></tr>"
+    op_a1 = fmt_num(float(r_a1.get("Open_Meter_Reading", 0) or 0))
+    op_f1 = fmt_num(float(r_f1.get("Open_Meter_Reading", 0) or 0))
+    op_f2 = fmt_num(float(r_f2.get("Open_Meter_Reading", 0) or 0))
 
-    return f"""
-    <div style='margin-bottom:3px; page-break-after:always; page-break-inside:avoid;'>
-        <table width='100%' class='header-table' cellspacing='0'>
-            <tr><td><div class='header-title'>BASANT JAMINI BHAWAN WELFARE ASSOCIATION</div>
-            <div class='header-subtitle'>Monthly Maintenance & Electricity Statement [{tenant_type}]</div></td></tr>
-        </table>
-        <div class='section-gap'></div>
-        <table width='100%' class='meta-table' cellspacing='0'>
-            <tr><td><b>Resident Name:</b> <b>{tenant}</b></td><td style='text-align:right;'><b>Billing Period:</b> <b>{due_month_str}-{due_year_str}</b></td></tr>
-            <tr><td><b>Flat Nos:</b> <b>{', '.join(flat_names)}</b></td><td style='text-align:right;'><b>Issue Date:</b> <b>{datetime.now().strftime('%d-%m-%Y')}</b></td></tr>
-        </table>
-        <div class='section-gap'></div>
-        {metrics_box_html}
-        <div class='section-gap'></div>
-        <table width='100%' cellspacing='0' cellpadding='0'>
-            <tr><td class='th-item'><b>Flat</b></td><td class='th-item' style='text-align:right;'><b>Opening</b></td><td class='th-item' style='text-align:right;'><b>Closing</b></td><td class='th-item' style='text-align:right;'><b>Units</b></td><td class='th-item' style='text-align:right;'><b>Electricity</b></td></tr>
-            {flat_rows}
-        </table>
-        <div class='section-gap'></div>
-        <table width='100%' cellspacing='0' cellpadding='0'>
-            <tr><td class='th-item'><b>Combined Charge Description</b></td><td class='th-item' style='text-align:right;'><b>Amount (Rs.)</b></td></tr>
-            {elec_row}
-            <tr><td class='td-item'>Fixed Meter Maintenance Charges (<b>{len(records)}</b> flats)</td><td class='td-item' style='text-align:right;'><b>Rs. {total_fixed:.2f}</b></td></tr>
-            <tr><td class='td-item'>Municipal Property Tax</td><td class='td-item' style='text-align:right;'><b>Rs. {total_tax:.2f}</b></td></tr>
-            {water_row}
-            <tr><td class='td-item'>Building Maintenance Fund (<b>{len(records)}</b> flats)</td><td class='td-item' style='text-align:right;'><b>Rs. {total_maint:.2f}</b></td></tr>
-            <tr><td class='td-item'>Lift Operational Share Fee (combined)</td><td class='td-item' style='text-align:right;'><b>Rs. {total_lift:.2f}</b></td></tr>
-            <tr><td class='td-item'>Miscellaneous / Others Overheads</td><td class='td-item' style='text-align:right;'><b>Rs. {total_others:.2f}</b></td></tr>
-        </table>
-        <div class='section-gap'></div>
-        <div class='total-box'><b>CUMULATIVE GROSS AMOUNT DUE: Rs. {total_gross:.0f}</b></div>
-        <div class='section-gap'></div>
-        <div class='notice-box'>{notice_content.replace(chr(10), '<br/>')}</div>
-        <div class='section-gap'></div>
-        <div class='footer-text'>This is a computer-generated digital statement issued by Basant Jamini Bhawan Welfare Association Hub.</div>
+    u_a1 = fmt_num(float(r_a1.get("Consumed_Units", 0) or 0))
+    u_f1 = fmt_num(float(r_f1.get("Consumed_Units", 0) or 0))
+    u_f2 = fmt_num(float(r_f2.get("Consumed_Units", 0) or 0))
+
+    rate = rpu_val
+
+    elec_a1 = fmt_num(float(r_a1.get("Electric_Charges_Rs", 0) or 0))
+    elec_f1 = fmt_num(float(r_f1.get("Electric_Charges_Rs", 0) or 0))
+    elec_f2 = fmt_num(float(r_f2.get("Electric_Charges_Rs", 0) or 0))
+
+    fixed_a1 = fmt_num(float(r_a1.get("Fixed_Meter_Charges_Rs", 0) or 0))
+    fixed_f1 = float(r_f1.get("Fixed_Meter_Charges_Rs", 0) or 0)
+    fixed_f2 = float(r_f2.get("Fixed_Meter_Charges_Rs", 0) or 0)
+    fixed_f1_f2_combine = fmt_num(fixed_f1 + fixed_f2)
+
+    maint_a1 = fmt_num(float(r_a1.get("Building_Maint_Fund_Rs", 0) or 0))
+    maint_f1 = float(r_f1.get("Building_Maint_Fund_Rs", 0) or 0)
+    maint_f2 = float(r_f2.get("Building_Maint_Fund_Rs", 0) or 0)
+    maint_f1_f2_combine = fmt_num(maint_f1 + maint_f2)
+
+    lift_a1 = fmt_num(float(r_a1.get("Lift_Charges_Rs", 0) or 0))
+    lift_f1 = float(r_f1.get("Lift_Charges_Rs", 0) or 0)
+    lift_f2 = float(r_f2.get("Lift_Charges_Rs", 0) or 0)
+    lift_f1_f2_combine = fmt_num(lift_a1 if (lift_f1 + lift_f2) == 0 else (lift_f1 + lift_f2))
+
+    water_str = fmt_num(total_water) if total_water > 0 else ""
+    others_str = fmt_num(total_others)
+
+    others_row = f"""
+    <tr>
+      <td>Miscellaneous / Others Overheads</td>
+      <td class="col-rs center">{others_str}</td>
+      <td class="col-p"></td>
+    </tr>""" if total_others and total_others > 0 else ""
+
+    html = f"""
+    <div style='page-break-after: always; page-break-inside: avoid;'>
+      <table class="header-box" cellspacing="0" cellpadding="0">
+        <tr>
+          <td>
+            <span class="title">BASANT JAMINI BHAWAN WELFARE ASSOCIATION</span><br/>
+            <span class="sub-title">Contractor's Area Road No. 2 Bistupur, Jamshedpur - 831001</span><br/>
+            <span class="charge-title">Monthly Maintenance Charge</span>
+          </td>
+        </tr>
+      </table>
+
+      <table class="meta-table" cellspacing="0" cellpadding="0">
+        <tr>
+          <td style="width: 55%;">Name : {tenant}</td>
+          <td style="width: 45%;"></td>
+        </tr>
+        <tr>
+          <td>Flat No. ( A-1 , F-1 , F-2 )</td>
+          <td style="text-align: right;">Due Month &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {period_display}</td>
+        </tr>
+      </table>
+
+      <table class="main-table" cellspacing="0" cellpadding="0">
+        <tr>
+          <td class="col-desc center bold" style="font-size: 9.5pt;">DESCRIPTION</td>
+          <td colspan="2" class="center bold" style="font-size: 9.5pt;">AMOUNT</td>
+        </tr>
+        <tr>
+          <td>&nbsp;</td>
+          <td class="col-rs center bold" style="font-size: 8.5pt;">Rs.</td>
+          <td class="col-p center bold" style="font-size: 8.5pt;">P.</td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 40%;">&nbsp;</td>
+                <td style="width: 20%; text-align: center;">A-1</td>
+                <td style="width: 20%; text-align: center;">F-1</td>
+                <td style="width: 20%; text-align: center;">F-2</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 40%;">Closing Meter Reading</td>
+                <td style="width: 20%; text-align: center;">{cl_a1}</td>
+                <td style="width: 20%; text-align: center;">{cl_f1}</td>
+                <td style="width: 20%; text-align: center;">{cl_f2}</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 40%;">&nbsp;</td>
+                <td style="width: 20%; text-align: center;">A-1</td>
+                <td style="width: 20%; text-align: center;">F-1</td>
+                <td style="width: 20%; text-align: center;">F-2</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 40%;">Opening Meter Reading</td>
+                <td style="width: 20%; text-align: center;">{op_a1}</td>
+                <td style="width: 20%; text-align: center;">{op_f1}</td>
+                <td style="width: 20%; text-align: center;">{op_f2}</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 40%;">Chargeable Unit</td>
+                <td style="width: 20%; text-align: center;">{u_a1}</td>
+                <td style="width: 20%; text-align: center;">{u_f1}</td>
+                <td style="width: 20%; text-align: center;">{u_f2}</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Total unit Consumed As per individual meter : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {fmt_num(total_units)} units ( A1, F1,F2 )</td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Electric Charges ( Commercial )</td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 14%;">&nbsp;</td>
+                <td style="width: 26%; text-align: center;">Meter unit</td>
+                <td style="width: 60%; text-align: center;">Elec. Charge / Unit ( in Rs.)</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs"></td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 14%;">A-1</td>
+                <td style="width: 26%; text-align: center;">{u_a1}</td>
+                <td style="width: 60%; text-align: center;">{rate:.2f}/-</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs center">{elec_a1}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 14%;">F-1</td>
+                <td style="width: 26%; text-align: center;">{u_f1}</td>
+                <td style="width: 60%; text-align: center;">{rate:.2f}/-</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs center">{elec_f1}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>
+            <table class="inner-tbl">
+              <tr>
+                <td style="width: 14%;">F-2</td>
+                <td style="width: 26%; text-align: center;">{u_f2}</td>
+                <td style="width: 60%; text-align: center;">{rate:.2f}/-</td>
+              </tr>
+            </table>
+          </td>
+          <td class="col-rs center">{elec_f2}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Fixed Meter Charges : &nbsp;&nbsp;&nbsp;&nbsp; ( A-1 : Rs. {fixed_a1}/-) + ( F-1 and F-2 combine Rs. {fixed_f1_f2_combine}/-)</td>
+          <td class="col-rs center">{fmt_num(total_fixed)}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Municipal Tax</td>
+          <td class="col-rs center">{fmt_num(total_tax)}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Water Charges</td>
+          <td class="col-rs center">{water_str}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Building Maint. fund : &nbsp;&nbsp;&nbsp;&nbsp; ( A-1 : Rs. {maint_a1}/-) + ( F-1 and F-2 combine Rs. {maint_f1_f2_combine}/-)</td>
+          <td class="col-rs center">{fmt_num(total_maint)}</td>
+          <td class="col-p"></td>
+        </tr>
+        <tr>
+          <td>Lift Charges : &nbsp;&nbsp;&nbsp;&nbsp; ( A-1 : Rs. {lift_a1}/-) + ( F-1 and F-2 combine Rs. {lift_f1_f2_combine}/-)</td>
+          <td class="col-rs center">{fmt_num(total_lift)}</td>
+          <td class="col-p"></td>
+        </tr>
+        {others_row}
+        <tr>
+          <td class="right bold" style="font-size: 9.5pt; padding-right: 14px;">TOTAL</td>
+          <td class="col-rs center bold" style="font-size: 9.5pt;">{total_gross}</td>
+          <td class="col-p"></td>
+        </tr>
+        {build_notice_rows_html(notice_content)}
+      </table>
     </div>
     """
+    return html
 
 def compile_pdf_bytes(compiled_html):
     """Compiles raw HTML content into PDF binary bytes using xhtml2pdf."""

@@ -8,6 +8,7 @@
 const state = {
     mode: "COMMERCIAL",
     activeTab: "tabUpload",
+    duesCurrentMode: null,
     configs: {},
     allLedgerRecords: [],
     ledgerColumns: [],
@@ -397,7 +398,7 @@ function refreshUIForCurrentMode() {
     renderFlatsChecklist();
     populateManualFlatDropdown();
     loadLedgerData();
-    loadDuesData();
+    loadDuesData(true);
     refreshLiveSettingsGrid();
 }
 
@@ -1217,42 +1218,73 @@ function downloadCurrentPdf() {
 
 // ----------------- TAB 3: DUES MANAGEMENT -----------------
 
-async function loadDuesData() {
+async function loadDuesData(forceModeReset = false) {
     const flatSelect = document.getElementById("comboDuesFlat");
-    const selectedFlat = flatSelect ? flatSelect.value : "ALL FLATS";
+    const modeChanged = forceModeReset || (state.duesCurrentMode !== state.mode);
+
+    if (modeChanged) {
+        state.duesCurrentMode = state.mode;
+        if (flatSelect) {
+            flatSelect.value = "ALL FLATS";
+        }
+    }
+
+    const selectedFlat = (!modeChanged && flatSelect) ? flatSelect.value : "ALL FLATS";
 
     try {
         const res = await fetch(`/api/dues?mode=${state.mode}&flat=${encodeURIComponent(selectedFlat || 'ALL FLATS')}`);
         const data = await res.json();
 
-        // Populate flats dropdown if needed
-        if (flatSelect && flatSelect.options.length <= 1) {
-            flatSelect.innerHTML = `<option value="ALL FLATS">ALL FLATS</option>`;
-            (data.flats || []).forEach(f => {
-                const opt = document.createElement("option");
-                opt.value = f;
-                opt.innerText = f;
-                flatSelect.appendChild(opt);
-            });
-            flatSelect.value = selectedFlat || "ALL FLATS";
+        // Repopulate flats dropdown if mode changed or options mismatch
+        if (flatSelect) {
+            const currentOptions = Array.from(flatSelect.options).map(o => o.value);
+            const expectedFlats = ["ALL FLATS", ...(data.flats || [])];
+            const needsRebuild = modeChanged ||
+                currentOptions.length !== expectedFlats.length ||
+                !expectedFlats.every((f, idx) => currentOptions[idx] === f);
+
+            if (needsRebuild) {
+                flatSelect.innerHTML = `<option value="ALL FLATS">ALL FLATS (Overview)</option>`;
+                const tenants = data.flat_tenants || {};
+                (data.flats || []).forEach(f => {
+                    const opt = document.createElement("option");
+                    opt.value = f;
+                    const t = tenants[f];
+                    opt.innerText = t ? `${f} (${t})` : f;
+                    flatSelect.appendChild(opt);
+                });
+
+                if (data.flats && data.flats.includes(selectedFlat)) {
+                    flatSelect.value = selectedFlat;
+                } else {
+                    flatSelect.value = "ALL FLATS";
+                }
+            }
         }
 
-        // KPI metrics
-        document.getElementById("kpiTotalDue").innerText = `Rs. ${(data.total_due || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
-        document.getElementById("kpiTotalPaid").innerText = `Rs. ${(data.total_paid || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
-        document.getElementById("kpiBalanceLeft").innerText = `Rs. ${(data.balance_left || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+        // KPI metrics with clean Indian currency formatting
+        const totalDue = Number(data.total_due || 0);
+        const totalPaid = Number(data.total_paid || 0);
+        const balanceLeft = Number(data.balance_left || 0);
 
-        renderDuesTable(data.records || []);
+        document.getElementById("kpiTotalDue").innerText = `Rs. ${totalDue.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById("kpiTotalPaid").innerText = `Rs. ${totalPaid.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById("kpiBalanceLeft").innerText = `Rs. ${balanceLeft.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+        renderDuesTable(data.records || [], state.mode);
     } catch (e) {
         console.error("Error loading dues:", e);
     }
 }
 
-function renderDuesTable(records) {
+function renderDuesTable(records, currentMode = "COMMERCIAL") {
     const headRow = document.getElementById("duesTableHeadRow");
     const body = document.getElementById("duesTableBody");
 
-    const cols = ["Flat_No", "Tenant_Name", "Due_Month", "Billing_Year", "Total_Amount_Due_Rs", "Partial_Payment_Rs", "Actual_Due_Rs", "Payment_Status"];
+    const isDomestic = (currentMode === "DOMESTIC");
+    const cols = isDomestic
+        ? ["Flat_No", "Tenant_Name", "Due_Month", "Billing_Year", "Consumed_Units", "Common_Area_Units", "Total_Amount_Due_Rs", "Partial_Payment_Rs", "Actual_Due_Rs", "Payment_Status"]
+        : ["Flat_No", "Tenant_Name", "Due_Month", "Billing_Year", "Consumed_Units", "Total_Amount_Due_Rs", "Partial_Payment_Rs", "Actual_Due_Rs", "Payment_Status"];
 
     headRow.innerHTML = "";
     body.innerHTML = "";
@@ -1279,12 +1311,29 @@ function renderDuesTable(records) {
         cols.forEach(col => {
             const td = document.createElement("td");
             let val = r[col];
-            if (typeof val === "number") val = `Rs. ${val.toFixed(2)}`;
+
+            if (typeof val === "number") {
+                if (col.endsWith("_Rs")) {
+                    val = `Rs. ${val.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                } else if (col.endsWith("_Units")) {
+                    val = val.toFixed(2);
+                }
+            }
+
             if (col === "Payment_Status") {
                 td.style.fontWeight = "bold";
-                td.style.color = "#dc2626";
+                const pPaid = Number(r.Partial_Payment_Rs || 0);
+                if (val === "PAID") {
+                    td.style.color = "#047857";
+                } else if (pPaid > 0) {
+                    td.style.color = "#d97706";
+                    val = "PARTIALLY PAID";
+                } else {
+                    td.style.color = "#dc2626";
+                }
             }
-            td.innerText = val !== undefined ? val : "";
+
+            td.innerText = (val !== undefined && val !== null) ? val : "";
             tr.appendChild(td);
         });
         body.appendChild(tr);

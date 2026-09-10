@@ -63,10 +63,11 @@ DEFAULT_DOMESTIC_CONFIG = {
 }
 
 DEFAULT_NOTICE_TEXT = (
-    "📢 IMPORTANT NOTICE TO RESIDENTS / TENANTS:\n"
-    "1. Please remit the cumulative gross balance due within 7 days of statement issuance.\n"
-    "2. Delayed payments incur a standard cross-association penalty rate assessment.\n"
-    "3. Kindly submit your digital bank deposit receipt copies directly to the welfare office block."
+    "i) This is to inform you that every month bill must be paid by the 16th of the following month.\n"
+    "   If payment is not received by the due date,the connection/line will be disconnected without further notice.\n"
+    "ii ) Payment may be made either by cheque in favour of Tata Steel Ltd or in cash\n"
+    "iii) This is to inform all holders of the premises that a person will be appointed for the purpose i) Generating bills and ii) collecting payments from each holder.The remunaration of said person will be arranged and shared equally . You are requested to kindly extend your cooperation in this matter,\n"
+    "iv) Park your vehicle in the Garrage area alloted to you ."
 )
 
 COMMERCIAL_COLUMNS = [
@@ -213,15 +214,19 @@ def apply_fifo_payment_allocation(records, target_flat, payment_amount, payment_
     if not payment_date:
         payment_date = datetime.now().strftime('%d-%m-%Y')
 
-    flat_target = str(target_flat).strip().lower()
+    target_can = canonical_flat(target_flat)
 
     # Identify matching indices
     unpaid_indices = []
     for idx, r in enumerate(records):
-        f = str(r.get("Flat_No", "")).strip().lower()
+        f = canonical_flat(r.get("Flat_No", ""))
         status = str(r.get("Payment_Status", "")).strip().upper()
         reset_flag = int(r.get("Reset", 0) or 0)
-        if f == flat_target and status != "PAID" and reset_flag == 0:
+        gross_due = round(float(r.get("Total_Amount_Due_Rs", 0) or 0), 2)
+        already_paid = round(float(r.get("Partial_Payment_Rs", 0) or 0), 2)
+        actual_due = round(max(0.0, float(r.get("Actual_Due_Rs", gross_due - already_paid) or 0)), 2)
+
+        if f == target_can and status != "PAID" and reset_flag == 0 and actual_due > 0.001:
             unpaid_indices.append(idx)
 
     # Sort chronologically by (Billing_Year, Due_Month)
@@ -236,18 +241,18 @@ def apply_fifo_payment_allocation(records, target_flat, payment_amount, payment_
 
     unpaid_indices.sort(key=sort_key)
 
-    remaining = float(payment_amount)
+    remaining = round(float(payment_amount), 2)
     allocated_count = 0
 
     for idx in unpaid_indices:
-        if remaining <= 0:
+        if remaining <= 0.001:
             break
         r = records[idx]
-        gross_due = float(r.get("Total_Amount_Due_Rs", 0) or 0)
-        already_paid = float(r.get("Partial_Payment_Rs", 0) or 0)
-        left = max(0.0, gross_due - already_paid)
+        gross_due = round(float(r.get("Total_Amount_Due_Rs", 0) or 0), 2)
+        already_paid = round(float(r.get("Partial_Payment_Rs", 0) or 0), 2)
+        left = round(max(0.0, gross_due - already_paid), 2)
 
-        if left <= 0:
+        if left <= 0.001:
             continue
 
         if remaining >= left:
@@ -255,15 +260,16 @@ def apply_fifo_payment_allocation(records, target_flat, payment_amount, payment_
             r["Actual_Due_Rs"] = 0.0
             r["Payment_Status"] = "PAID"
             r["Payment_Date"] = payment_date
-            remaining -= left
+            remaining = round(remaining - left, 2)
             allocated_count += 1
         else:
-            new_paid = already_paid + remaining
+            new_paid = round(already_paid + remaining, 2)
             r["Partial_Payment_Rs"] = new_paid
-            r["Actual_Due_Rs"] = max(0.0, gross_due - new_paid)
+            r["Actual_Due_Rs"] = round(max(0.0, gross_due - new_paid), 2)
             r["Payment_Status"] = "UNPAID"
             r["Payment_Date"] = payment_date
             remaining = 0.0
-            allocated_count += 0.5
+            allocated_count += 1
 
-    return records, allocated_count, remaining
+    return records, allocated_count, round(remaining, 2)
+

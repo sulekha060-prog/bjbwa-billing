@@ -561,22 +561,53 @@ def delete_ledger_rows(req: DeleteRowsRequest, _: bool = Depends(verify_admin)):
 
 @app.get("/api/dues")
 def get_dues_overview(mode: str = "COMMERCIAL", flat: Optional[str] = None):
-    records = sheets_mgr.load_records(mode)
+    mode_str = mode.upper() if mode else "COMMERCIAL"
+    records = sheets_mgr.load_records(mode_str)
 
-    # All unique flats for dropdown
-    all_flats = sorted(list(set(str(r.get("Flat_No", "")).strip() for r in records if str(r.get("Flat_No", "")).strip())))
+    # Config flats & tenant lookup
+    cfg_file = "domestic_config.json" if mode_str == "DOMESTIC" else "commercial_config.json"
+    default_cfg = core.DEFAULT_DOMESTIC_CONFIG if mode_str == "DOMESTIC" else core.DEFAULT_COMMERCIAL_CONFIG
+    cfg = load_json(cfg_file, default_cfg)
 
-    # Filter unpaid, reset=0
+    config_flats = [k for k, v in cfg.items() if not v.get("is_common", False)]
+    flat_tenants = {k: v.get("tenant", "") for k, v in cfg.items() if not v.get("is_common", False)}
+
+    # Build all_flats preserving natural config order first, then any extra flats from records
+    seen = set()
+    all_flats = []
+    for f in config_flats:
+        if f not in seen:
+            seen.add(f)
+            all_flats.append(f)
+    for r in records:
+        f = str(r.get("Flat_No", "")).strip()
+        if f and f not in seen and f.upper() != "COMMON":
+            seen.add(f)
+            all_flats.append(f)
+            flat_tenants[f] = str(r.get("Tenant_Name", "")).strip()
+
+    # Canonical matching for target flat
+    target_canonical = core.canonical_flat(flat) if flat and flat != "ALL FLATS" else None
+
+    # Filter unpaid, reset=0, actual_due > 0
     unpaid_records = []
     for idx, r in enumerate(records):
         status = str(r.get("Payment_Status", "")).strip().upper()
         reset_val = int(r.get("Reset", 0) or 0)
         f_no = str(r.get("Flat_No", "")).strip()
+        rec_canonical = core.canonical_flat(f_no)
 
-        if status != "PAID" and reset_val == 0:
-            if not flat or flat == "ALL FLATS" or f_no.lower() == flat.lower():
+        gross = round(float(r.get("Total_Amount_Due_Rs", 0) or 0), 2)
+        paid = round(float(r.get("Partial_Payment_Rs", 0) or 0), 2)
+        actual_due = round(max(0.0, float(r.get("Actual_Due_Rs", gross - paid) or 0)), 2)
+
+        if status != "PAID" and reset_val == 0 and actual_due > 0.001:
+            if not target_canonical or rec_canonical == target_canonical:
                 r_copy = r.copy()
                 r_copy["_index"] = idx
+                r_copy["Total_Amount_Due_Rs"] = gross
+                r_copy["Partial_Payment_Rs"] = paid
+                r_copy["Actual_Due_Rs"] = actual_due
                 unpaid_records.append(r_copy)
 
     # Chronological sort
@@ -590,12 +621,14 @@ def get_dues_overview(mode: str = "COMMERCIAL", flat: Optional[str] = None):
 
     unpaid_records.sort(key=sort_key)
 
-    total_due = sum(float(r.get("Total_Amount_Due_Rs", 0) or 0) for r in unpaid_records)
-    total_paid = sum(float(r.get("Partial_Payment_Rs", 0) or 0) for r in unpaid_records)
-    balance_left = sum(float(r.get("Actual_Due_Rs", 0) or 0) for r in unpaid_records)
+    total_due = round(sum(float(r.get("Total_Amount_Due_Rs", 0) or 0) for r in unpaid_records), 2)
+    total_paid = round(sum(float(r.get("Partial_Payment_Rs", 0) or 0) for r in unpaid_records), 2)
+    balance_left = round(sum(float(r.get("Actual_Due_Rs", 0) or 0) for r in unpaid_records), 2)
 
     return {
+        "mode": mode_str,
         "flats": all_flats,
+        "flat_tenants": flat_tenants,
         "selected_flat": flat or "ALL FLATS",
         "total_due": total_due,
         "total_paid": total_paid,
@@ -691,6 +724,8 @@ def print_selected_statements(req: PrintStatementsRequest):
                     existing_keys.add(k)
 
     notice_content = get_notices_text()
+    rpu_rates = get_rpu_rates()
+    active_rpu = float(rpu_rates.get("commercial", core.RATE_COMMERCIAL)) if mode == "COMMERCIAL" else float(rpu_rates.get("domestic", core.RATE_DOMESTIC))
     compiled_html = ""
 
     for kind, group in core.build_grouped_print_records(selected_rows):
@@ -701,7 +736,8 @@ def print_selected_statements(req: PrintStatementsRequest):
                 due_month_str=str(first.get("Due_Month", "")),
                 due_year_str=str(first.get("Billing_Year", "")),
                 tenant_type=mode,
-                notice_content=notice_content
+                notice_content=notice_content,
+                rpu_val=active_rpu
             )
         else:
             r = group[0]
@@ -732,7 +768,8 @@ def print_selected_statements(req: PrintStatementsRequest):
                 tenant_type=mode,
                 com_area_val=com_units,
                 notice_content=notice_content,
-                meter_units=meter_consumed
+                meter_units=meter_consumed,
+                rpu_val=active_rpu
             )
 
     pdf_bytes = pdf_generator.compile_pdf_bytes(compiled_html)
