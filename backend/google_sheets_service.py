@@ -49,6 +49,17 @@ class GoogleSheetsManager:
         # 3. Connect to Google Sheets
         self.try_connect_google_sheets()
 
+        # 4. On cloud deployments (ephemeral filesystem), the local store starts
+        #    empty after every restart. Pull fresh data from Google Sheets in the
+        #    background so the cache is populated from the authoritative source.
+        local_empty = (
+            not self._memory_cache.get("Maintenance bill") and
+            not self._memory_cache.get("Domestic Maintenance bill")
+        )
+        if self.is_connected and local_empty:
+            t = threading.Thread(target=self._startup_pull, daemon=True)
+            t.start()
+
     def _load_config(self):
         if os.path.exists(SHEETS_CONFIG_FILE):
             try:
@@ -114,6 +125,21 @@ class GoogleSheetsManager:
         df['Actual_Due_Rs'] = (gross - df['Partial_Payment_Rs']).clip(lower=0.0)
         df.loc[df['Actual_Due_Rs'].eq(0), 'Payment_Status'] = 'PAID'
         return df[required_columns]
+
+    def _startup_pull(self):
+        """
+        Background startup task: pulls all records from Google Sheets so that
+        after an ephemeral-filesystem restart (e.g. Render free tier), the
+        in-memory cache and local store are restored from the authoritative source.
+        """
+        print("[BJBWA] Ephemeral filesystem detected – pulling fresh data from Google Sheets on startup...")
+        try:
+            for mode in ["COMMERCIAL", "DOMESTIC"]:
+                self.load_records(mode, force_refresh=True)
+            self.last_sync_time = datetime.now().strftime("%H:%M:%S")
+            print("[BJBWA] Startup pull complete. Cache restored from Google Sheets.")
+        except Exception as e:
+            print(f"[BJBWA] Startup pull failed: {e}")
 
     def try_connect_google_sheets(self):
         """Attempts to authenticate either via Apps Script Webhook or Google Service Account."""
@@ -247,7 +273,14 @@ class GoogleSheetsManager:
                 if res.status_code == 200:
                     data = res.json()
                     if data.get("status") == "ok":
-                        df = pd.DataFrame(data.get("records", []))
+                        raw_records = data.get("records", [])
+                        if not raw_records:
+                            # Empty sheet — update cache so we don't re-fetch on next call
+                            with self._lock:
+                                self._memory_cache[sheet_name] = []
+                                self._write_local_store(self._memory_cache)
+                            return []
+                        df = pd.DataFrame(raw_records)
                         df = self._sanitize_records(df, cols)
                         records = df.to_dict(orient="records")
                         with self._lock:
