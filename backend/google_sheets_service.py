@@ -128,18 +128,141 @@ class GoogleSheetsManager:
 
     def _startup_pull(self):
         """
-        Background startup task: pulls all records from Google Sheets so that
-        after an ephemeral-filesystem restart (e.g. Render free tier), the
-        in-memory cache and local store are restored from the authoritative source.
+        Background startup task: pulls all records AND app config from Google Sheets
+        so that after an ephemeral-filesystem restart (e.g. Render free tier), the
+        in-memory cache, local store, and config files are all restored from the
+        authoritative source in Google Sheets.
         """
         print("[BJBWA] Ephemeral filesystem detected – pulling fresh data from Google Sheets on startup...")
         try:
+            # 1. Restore billing records
             for mode in ["COMMERCIAL", "DOMESTIC"]:
                 self.load_records(mode, force_refresh=True)
+
+            # 2. Restore all app config (invoice notice, RPU rates, flat configs)
+            self._pull_app_config_to_disk()
+
             self.last_sync_time = datetime.now().strftime("%H:%M:%S")
-            print("[BJBWA] Startup pull complete. Cache restored from Google Sheets.")
+            print("[BJBWA] Startup pull complete. Records and config restored from Google Sheets.")
         except Exception as e:
             print(f"[BJBWA] Startup pull failed: {e}")
+
+    def _pull_app_config_to_disk(self):
+        """
+        Fetches all key-value app config from the Google Sheets 'App Config' sheet
+        and writes each config back to its corresponding local JSON file.
+        Called on startup and on explicit pull.
+        """
+        if not self.is_connected or self.connection_type != "apps_script":
+            return
+
+        try:
+            url = self.config.get("apps_script_url")
+            res = requests.get(url, params={"mode": "CONFIG"}, timeout=12)
+            if res.status_code != 200:
+                return
+
+            data = res.json()
+            if data.get("status") != "ok":
+                return
+
+            cfg_map = data.get("config", {})
+            if not cfg_map:
+                return
+
+            # Map stored keys → local JSON file + dict key structure
+            key_to_file = {
+                "invoice_notice_text": ("invoice_notices.json", "notice_text"),
+                "rpu_rate_domestic":   ("billing_rpu_rates.json", "domestic"),
+                "rpu_rate_commercial": ("billing_rpu_rates.json", "commercial"),
+            }
+
+            # Collect what we have in the config sheet
+            updates = {}
+            for sheet_key, (filename, dict_key) in key_to_file.items():
+                if sheet_key in cfg_map:
+                    updates.setdefault(filename, {})
+                    val = cfg_map[sheet_key]
+                    # Coerce numeric values
+                    if dict_key in ("domestic", "commercial"):
+                        try:
+                            val = float(val)
+                        except (ValueError, TypeError):
+                            continue
+                    updates[filename][dict_key] = val
+
+            # Write each file only if we have values for it
+            for filename, new_vals in updates.items():
+                file_path = os.path.join(CONFIG_DIR, filename)
+                existing = {}
+                if os.path.exists(file_path):
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            existing = json.load(f)
+                    except Exception:
+                        pass
+                existing.update(new_vals)
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(existing, f, indent=4)
+
+            print(f"[BJBWA] App config restored from Google Sheets: {list(updates.keys())}")
+
+        except Exception as e:
+            print(f"[BJBWA] Config pull warning: {e}")
+
+    # ─── App Config: save & load key-value pairs to/from Google Sheets ──────────
+
+    def save_app_config(self, key: str, value, sync_background=True):
+        """
+        Persists a single app config key-value pair to the Google Sheets
+        'App Config' sheet. Call this whenever a config file (invoice notice,
+        RPU rates, etc.) is updated so it survives Render restarts.
+
+        Args:
+            key:   A stable string key, e.g. "invoice_notice_text"
+            value: The value to store (string, int, or float)
+        """
+        if not self.is_connected or self.connection_type != "apps_script":
+            return  # No-op if not connected; disk file is still updated by caller
+
+        def _push():
+            try:
+                url = self.config.get("apps_script_url")
+                requests.post(url, json={
+                    "action": "saveConfig",
+                    "key": key,
+                    "value": value
+                }, timeout=15)
+            except Exception as e:
+                print(f"[BJBWA] save_app_config warning ({key}): {e}")
+
+        if sync_background:
+            threading.Thread(target=_push, daemon=True).start()
+        else:
+            _push()
+
+    def save_multiple_app_configs(self, entries: dict, sync_background=True):
+        """
+        Persists multiple key-value pairs to the 'App Config' sheet in one request.
+        More efficient than calling save_app_config() repeatedly.
+        """
+        if not self.is_connected or self.connection_type != "apps_script":
+            return
+
+        def _push():
+            try:
+                url = self.config.get("apps_script_url")
+                requests.post(url, json={
+                    "action": "saveAllConfig",
+                    "entries": entries
+                }, timeout=15)
+            except Exception as e:
+                print(f"[BJBWA] save_multiple_app_configs warning: {e}")
+
+        if sync_background:
+            threading.Thread(target=_push, daemon=True).start()
+        else:
+            _push()
 
     def try_connect_google_sheets(self):
         """Attempts to authenticate either via Apps Script Webhook or Google Service Account."""
@@ -394,7 +517,7 @@ class GoogleSheetsManager:
         return self.save_records(mode, existing, sync_background=sync_background)
 
     def pull_from_google_sheets(self):
-        """Pulls latest records from Google Sheets for all modes into memory & local store."""
+        """Pulls latest records AND app config from Google Sheets for all modes into memory & local store."""
         ok, msg = self.try_connect_google_sheets()
         if not ok:
             return False, msg
@@ -402,8 +525,11 @@ class GoogleSheetsManager:
         for mode in ["COMMERCIAL", "DOMESTIC"]:
             self.load_records(mode, force_refresh=True)
 
+        # Also restore app config (invoice notice, RPU rates, etc.)
+        self._pull_app_config_to_disk()
+
         self.last_sync_time = datetime.now().strftime("%H:%M:%S")
-        return True, "Successfully pulled latest data from Google Sheets."
+        return True, "Successfully pulled latest data and config from Google Sheets."
 
     def sync_all_to_google_sheets(self):
         """Pushes all local in-memory records to Google Sheets synchronously."""

@@ -174,7 +174,13 @@ def update_rpu_rates(req: SaveRPURatesRequest, _: bool = Depends(verify_admin)):
     if req.domestic < 0 or req.commercial < 0:
         raise HTTPException(status_code=400, detail="RPU values cannot be negative.")
     data = {"domestic": round(req.domestic, 2), "commercial": round(req.commercial, 2)}
+    # 1. Write to local disk (fast, immediate)
     save_json("billing_rpu_rates.json", data)
+    # 2. Persist to Google Sheets so the rates survive Render ephemeral restarts
+    sheets_mgr.save_multiple_app_configs({
+        "rpu_rate_domestic":   data["domestic"],
+        "rpu_rate_commercial": data["commercial"]
+    })
     return {"status": "ok", "rpu_rates": data}
 
 class SaveRatesRequest(BaseModel):
@@ -218,8 +224,12 @@ class SaveNoticeRequest(BaseModel):
 
 @app.post("/api/config/notices")
 def save_notice(req: SaveNoticeRequest, _: bool = Depends(verify_admin)):
-    save_json("invoice_notices.json", {"notice_text": req.notice_text.strip()})
-    return {"status": "ok", "notice_text": req.notice_text.strip()}
+    clean_text = req.notice_text.strip()
+    # 1. Write to local disk (fast, immediate)
+    save_json("invoice_notices.json", {"notice_text": clean_text})
+    # 2. Persist to Google Sheets so it survives Render ephemeral restarts
+    sheets_mgr.save_app_config("invoice_notice_text", clean_text)
+    return {"status": "ok", "notice_text": clean_text}
 
 # ----------------- UPLOAD & PROCESS -----------------
 
